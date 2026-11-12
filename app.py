@@ -55,4 +55,89 @@ def get_pubchem_info(smiles):
             return props.get('Title', 'Досліджувана сполука'), props.get('IUPACName', 'Не знайдено')
     except Exception:
         pass
-    return "Нова психоактивна речо
+    return "Нова психоактивна речовина", "Дані мережі недоступні"
+
+def analyze_molecule(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    if not mol:
+        return None, "Помилка: невірний формат SMILES."
+
+    mw = Descriptors.MolWt(mol)
+    heavy_atoms_count = mol.GetNumHeavyAtoms()
+    
+    is_direct = smiles in DIRECT_LIST_770
+    matched_groups = []
+    
+    if not is_direct:
+        for group_name, smarts in PATTERNS.items():
+            pattern = Chem.MolFromSmarts(smarts)
+            if pattern and mol.HasSubstructMatch(pattern):
+                matched_groups.append(group_name)
+
+    common_name, iupac_name = get_pubchem_info(smiles)
+
+    return {
+        "mol": mol,
+        "mw": round(mw, 2),
+        "heavy_atoms": heavy_atoms_count,
+        "is_direct": is_direct,
+        "direct_info": DIRECT_LIST_770.get(smiles, ("", ""))[1],
+        "groups": matched_groups,
+        "common_name": common_name,
+        "iupac_name": iupac_name
+    }, None
+
+if search_btn and smiles_input.strip():
+    res, err = analyze_molecule(smiles_input.strip())
+    if err:
+        st.error(err)
+    else:
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("Візуалізація структури")
+            img = MolToImage(res["mol"], size=(300, 300))
+            st.image(img, use_column_width=True)
+            st.metric("Молекулярна маса (а.о.м.)", res["mw"])
+            st.metric("Кількість важких атомів", res["heavy_atoms"])
+
+        with col2:
+            st.subheader("Результати аналізу та ідентифікація")
+            st.info("Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213", icon="ℹ️")
+            st.write(f"**Найменування / Синонім:** {res['common_name']}")
+            st.write(f"**Систематична назва (IUPAC):** {res['iupac_name']}")
+            
+            st.markdown("---")
+            if res["is_direct"]:
+                st.error("⚠️ **Речовина вже включена як самостійна позиція до Переліку ПКМУ № 770!**")
+                st.write("Статус у Переліку підтверджено офіційними даними.")
+                
+                st.markdown("---")
+                st.subheader("📝 Проект висновку експерта:")
+                st.code(
+                    f"Досліджувана речовина ({res['common_name']}) є самостійною позицією у Переліку наркотичних "
+                    f"засобів, психотропних речовин і прекурсорів, затвердженого постановою Кабінету Міністрів України "
+                    f"від 06.05.2000 № 770 ({res['direct_info']}).",
+                    language="text"
+                )
+            elif res["groups"]:
+                for g in res["groups"]:
+                    st.success(f"Виявлено структурну відповідність групі: **{g}**")
+                
+                detected_group = res['groups'][0]
+                
+                st.markdown("---")
+                st.subheader("📝 Проект висновку експерта:")
+                st.code(
+                    f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
+                    f"ознаки, характерні для групи «{detected_group}».\n"
+                    f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
+                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин.\n\n"
+                    f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
+                    f"наркотичних засобів, психотропних речовин і прекурсорів.",
+                    language="text"
+                )
+            else:
+                st.warning("Прямих збігів з самостійними позиціями Переліку № 770 або базовими ядрами похідних у межах поточних шаблонів не виявлено.")
+else:
+    st.info("Введіть рядок SMILES у боковій панелі зліва та натисніть кнопку «Перевірити».")
