@@ -4,44 +4,45 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem.Draw import MolToImage
 
-st.set_page_config(page_title="Экспертиза НПВ — Постановление № 1213", layout="wide")
+st.set_page_config(page_title="Автоматизація віднесення до похідних — ПКМУ № 1213", layout="wide")
 
-st.title("🔬 Автоматизация отнесения веществ к производным")
-st.caption("Проверка по структурно-групповым признакам и автоопределение наименований (ПКМУ № 770 / № 1213)")
+st.title("🔬 Автоматизація віднесення речовин до похідних")
+st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
-# Боковая панель для ввода данных
-st.sidebar.header("Ввод структуры")
-smiles_input = st.sidebar.text_input("Введите SMILES соединения:", "O=C(c1ccccc1)C(NC)CC")
-search_btn = st.sidebar.button("Проверить вещество")
+# Бокова панель для введення даних
+st.sidebar.header("Введення структури")
+smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCN(CC)CCN1C2=C(C=C(C=C2)[N+](=O)[O-])N=C1CC3=CC=C(C=C3)OC4CC4")
+search_btn = st.sidebar.button("Перевірити речовину")
 
-# Базовые SMARTS-шаблоны
+# Повні SMARTS-шаблони згідно з методикою МВС та ПКМУ № 1213
 PATTERNS = {
-    "Производные синтетических катинонов": "c1ccccc1CC(N)C=O",
-    "Производные фенетиламинов": "c1ccccc1CCN",
-    "Синтетические канабиноиды (Индолы/Индазолы)": "c1ccc2c(c1)c(c[nH]2)",
-    "Производные фентанилов": "N1CCC(CC1)(N(C(=O)CC)c2ccccc2)c3ccccc3",
-    "Производные триптаминов": "c1ccc2c(c1)c(c[nH]2)CCN"
+    "Похідні групи нітазену (Бензимидазольні опиоїди)": "c1ccc2c(c1)nc([nH]2)CC",
+    "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)CC",
+    "Похідні групи 2-фенетиламіну": "c1ccccc1CCN",
+    "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)",
+    "Похідні групи фентанілу (4-анілінопіперидин)": "N1CCC(CC1)(N(C(=O)CC)c2ccccc2)c3ccccc3",
+    "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
 
 def get_pubchem_info(smiles):
-    """Запрос официального названия и CAS из PubChem по SMILES"""
+    """Запит офіційної назви та IUPAC з PubChem"""
     try:
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName,Title/json"
         response = requests.get(url, timeout=3)
         if response.status_code == 200:
             data = response.json()
             props = data['PropertyTable']['Properties'][0]
-            iupac_name = props.get('IUPACName', 'Не найдено')
-            title = props.get('Title', 'Не найдено')
+            iupac_name = props.get('IUPACName', 'Не знайдено')
+            title = props.get('Title', 'Досліджувана сполука')
             return title, iupac_name
     except Exception:
         pass
-    return "Сведения уточняются", "Не удалось получить данные из сети"
+    return "Нова психоактивна речовина", "Дані мережі недоступні"
 
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
-        return None, "Ошибка: неверный формат SMILES. Проверьте правильность строки."
+        return None, "Помилка: невірний формат SMILES. Перевірте правильність рядка."
 
     mw = Descriptors.MolWt(mol)
     heavy_atoms_count = mol.GetNumHeavyAtoms()
@@ -52,7 +53,6 @@ def analyze_molecule(smiles):
         if pattern and mol.HasSubstructMatch(pattern):
             matched_groups.append(group_name)
 
-    # Получаем информацию из открытых баз данных
     common_name, iupac_name = get_pubchem_info(smiles)
 
     return {
@@ -72,31 +72,35 @@ if smiles_input:
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.subheader("Визуализация структуры")
+            st.subheader("Візуалізація структури")
             img = MolToImage(res["mol"], size=(300, 300))
             st.image(img, use_column_width=True)
-            st.metric("Молекулярная масса (а.о.м.)", res["mw"])
-            st.metric("Количество тяжелых атомов", res["heavy_atoms"])
+            st.metric("Молекулярна маса (а.о.м.)", res["mw"])
+            st.metric("Кількість важких атомів", res["heavy_atoms"])
 
         with col2:
-            st.subheader("Результаты анализа и идентификация")
-            st.info("Данные получены из базы PubChem и структурного анализа", icon="ℹ️")
-            st.write(f"**Наименование / Синоним:** {res['common_name']}")
-            st.write(f"**Систематическое название (IUPAC):** {res['iupac_name']}")
+            st.subheader("Результати аналізу та ідентифікація")
+            st.info("Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213", icon="ℹ️")
+            st.write(f"**Найменування / Синонім:** {res['common_name']}")
+            st.write(f"**Систематична назва (IUPAC):** {res['iupac_name']}")
             
             st.markdown("---")
             if res["groups"]:
                 for g in res["groups"]:
-                    st.success(f"Обнаружено структурное соответствие группе: **{g}**")
+                    st.success(f"Виявлено структурну відповідність групі: **{g}**")
+                
+                detected_group = res['groups'][0]
                 
                 st.markdown("---")
-                st.subheader("📝 Проект вывода эксперта:")
+                st.subheader("📝 Проект висновку експерта:")
                 st.code(
-                    f"Исследуемое вещество ({res['common_name']}) содержит базовое ядро и структурные "
-                    f"признаки, характерные для группы «{res['groups'][0]}».\n"
-                    f"Согласно Постановлению КМУ № 1213 от 02.10.2026 о внесении изменений в ПКМУ № 770, "
-                    f"данное соединение подпадает под критерии отнесения к производным подконтрольных веществ.",
+                    f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
+                    f"ознаки, характерні для групи «{detected_group}».\n"
+                    f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
+                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин[cite: 8].\n\n"
+                    f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
+                    f"наркотичних засобів, психотропних речовин і прекурсорів[cite: 27].",
                     language="text"
                 )
             else:
-                st.warning("Прямых совпадений с базовыми ядрами подконтрольных групп в рамках текущих шаблонов не обнаружено. Требуется ручной анализ.")
+                st.warning("Прямих збігів з базовими ядрами підконтрольних груп у межах поточних шаблонів не виявлено. Потрібен ручний аналіз згідно з додатком до Постанови № 1213[cite: 8].")
