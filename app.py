@@ -55,38 +55,4 @@ def get_pubchem_info(smiles):
             return props.get('Title', 'Досліджувана сполука'), props.get('IUPACName', 'Не знайдено')
     except Exception:
         pass
-    return "Нова психоактивна речовина", "Дані мережі недоступні"
-
-def analyze_molecule(smiles):
-    mol = Chem.MolFromSmiles(smiles)
-    if not mol:
-        return None, "Помилка: невірний формат SMILES."
-
-    mw = Descriptors.MolWt(mol)
-    heavy_atoms_count = mol.GetNumHeavyAtoms()
-    
-    is_direct = smiles in DIRECT_LIST_770
-    matched_groups = []
-    
-    if not is_direct:
-        for group_name, smarts in PATTERNS.items():
-            pattern = Chem.MolFromSmarts(smarts)
-            if pattern and mol.HasSubstructMatch(pattern):
-                matched_groups.append(group_name)
-
-    common_name, iupac_name = get_pubchem_info(smiles)
-
-    return {
-        "mol": mol,
-        "mw": round(mw, 2),
-        "heavy_atoms": heavy_atoms_count,
-        "is_direct": is_direct,
-        "direct_info": DIRECT_LIST_770.get(smiles, ("", ""))[1],
-        "groups": matched_groups,
-        "common_name": common_name,
-        "iupac_name": iupac_name
-    }, None
-
-# Запуск розрахунку по натисканню кнопки «Перевірити» або якщо поле вже містить текст і була дія
-if search_btn and smiles_input.strip():
-    res, err = analyze_molecule(smiles
+    return "Нова психоактивна речо
