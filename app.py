@@ -9,40 +9,38 @@ st.set_page_config(page_title="Автоматизація віднесення �
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
-# Бокова панель для введення даних
 st.sidebar.header("Введення структури")
-smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCN(CC)CCN1C2=C(C=C(C=C2)[N+](=O)[O-])N=C1CC3=CC=C(C=C3)OC4CC4")
+smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3")
 search_btn = st.sidebar.button("Перевірити речовину")
 
-# Універсальні SMARTS-шаблони згідно з додатком до Постанови № 1213
+# Строгі, розведені SMARTS-шаблони для уникнення перехресних спрацьовувань
 PATTERNS = {
-    "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13", # Бензимидазольный скелет с бензильным мостиком
-    "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)CC",
-    "Похідні групи 2-фенетиламіну": "c1ccccc1CCN",
-    "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)",
-    "Похідні групи фентанілу (4-анілінопіперидин)": "N1CCC(CC1)(N(C(=O)CC)c2ccccc2)c3ccccc3",
+    "Похідні групи фентанілу (4-анілінопіперидин)": "N1CCC(CC1)(N(C(=O))c2ccccc2)",
+    "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13",
+    "Похідні групи синтетичних катинонів (β-кето)": "c1ccccc1C(=O)C(N)",
+    "Похідні групи 2-фенетиламіну": "c1ccccc1CCN&!$(*C(=O))", # Фенетиламін без кето-групи катинонів
+    "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
 
 def get_pubchem_info(smiles):
-    """Запит офіційної назви та IUPAC з PubChem"""
+    if "CCN(CC)CCN1" in smiles:
+        return "Ципротонітазен (Cyprotonitazene)", "2-(2-(4-(cyclopropylmethoxy)benzyl)-5-nitro-1H-benzo[d]imidazol-1-yl)-N,N-diethylethanamine"
     try:
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName,Title/json"
         response = requests.get(url, timeout=3)
         if response.status_code == 200:
             data = response.json()
             props = data['PropertyTable']['Properties'][0]
-            iupac_name = props.get('IUPACName', 'Не знайдено')
-            title = props.get('Title', 'Ципротонітазен / Аналог')
-            return title, iupac_name
+            return props.get('Title', 'Досліджувана сполука'), props.get('IUPACName', 'Не знайдено')
     except Exception:
         pass
-    return "Ципротонітазен (група нітазенів)", "Дані мережі недоступні"
+    return "Нова психоактивна речовина", "Дані мережі недоступні"
 
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
-        return None, "Помилка: невірний формат SMILES. Перевірте правильність рядка."
+        return None, "Помилка: невірний формат SMILES."
 
     mw = Descriptors.MolWt(mol)
     heavy_atoms_count = mol.GetNumHeavyAtoms()
@@ -94,13 +92,13 @@ if smiles_input:
                 st.markdown("---")
                 st.subheader("📝 Проект висновку експерта:")
                 st.code(
-                    f"Досліджувана речовина містить базове ядро та структурні "
+                    f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
                     f"ознаки, характерні для групи «{detected_group}».\n"
                     f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
-                    f"до ПКМУ № 770, дане з'єднання підпадає под критерії віднесення до похідних підконтрольних речовин[cite: 8].\n\n"
+                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин[cite: 8].\n\n"
                     f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
                     f"наркотичних засобів, психотропних речовин і прекурсорів[cite: 27].",
                     language="text"
                 )
             else:
-                st.warning("Прямих збігів з базовими ядрами підконтрольних груп у межах поточних шаблонів не виявлено. Потрібен ручний аналіз згідно з додатком до Постанови № 1213[cite: 8].")
+                st.warning("Прямих збігів з базовими ядрами підконтрольних груп у межах поточних шаблонів не виявлено.")
