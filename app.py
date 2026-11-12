@@ -9,34 +9,40 @@ st.set_page_config(page_title="Автоматизація віднесення �
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
-# Безпечна ініціалізація стану
 if "smiles_val" not in st.session_state:
-    st.session_state.smiles_val = "CCN(CC)CCN1C2=C(C=C(C=C2)[N+](=O)[O-])N=C1CC3=CC=C(C=C3)OC4CC4"
+    st.session_state.smiles_val = "CC(CC1=CC=CC=C1)N"
 
 st.sidebar.header("Введення структури")
 
-# Функція очищення поля
 def clear_text():
     st.session_state.smiles_val = ""
 
-# Поле введення та кнопки
 smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", key="smiles_val")
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
 clear_btn = col_btn2.button("Очистити", on_click=clear_text)
 
-# Універсальні SMARTS-шаблони згідно з ПКМУ № 1213
+# Прямі самостійні позиції згідно з ПКМУ № 770
+DIRECT_LIST_770 = {
+    "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
+    "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
+    "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
+    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
+}
+
 PATTERNS = {
     "Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)": "N1CCC(CC1)N(C(=O))",
     "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13",
-    "Похідні групи синтетичних катинонів (β-кето)": "c1ccccc1C(=O)C(N)",
+    "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)",
     "Похідні групи 2-фенетиламіну": "c1ccccc1CC[NH]",
     "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
 
 def get_pubchem_info(smiles):
+    if smiles in DIRECT_LIST_770:
+        return DIRECT_LIST_770[smiles][0], "Самостійна позиція Переліку ПКМУ № 770"
     if "CCN(CC)CCN1" in smiles:
         return "Ципротонітазен (Cyprotonitazene)", "2-(2-(4-(cyclopropylmethoxy)benzyl)-5-nitro-1H-benzo[d]imidazol-1-yl)-N,N-diethylethanamine"
     if "C3=CC=CC=N3" in smiles or "c1ccncc1" in smiles:
@@ -60,11 +66,14 @@ def analyze_molecule(smiles):
     mw = Descriptors.MolWt(mol)
     heavy_atoms_count = mol.GetNumHeavyAtoms()
     
+    is_direct = smiles in DIRECT_LIST_770
     matched_groups = []
-    for group_name, smarts in PATTERNS.items():
-        pattern = Chem.MolFromSmarts(smarts)
-        if pattern and mol.HasSubstructMatch(pattern):
-            matched_groups.append(group_name)
+    
+    if not is_direct:
+        for group_name, smarts in PATTERNS.items():
+            pattern = Chem.MolFromSmarts(smarts)
+            if pattern and mol.HasSubstructMatch(pattern):
+                matched_groups.append(group_name)
 
     common_name, iupac_name = get_pubchem_info(smiles)
 
@@ -72,6 +81,8 @@ def analyze_molecule(smiles):
         "mol": mol,
         "mw": round(mw, 2),
         "heavy_atoms": heavy_atoms_count,
+        "is_direct": is_direct,
+        "direct_info": DIRECT_LIST_770.get(smiles, ("", ""))[1],
         "groups": matched_groups,
         "common_name": common_name,
         "iupac_name": iupac_name
@@ -98,7 +109,19 @@ if smiles_input.strip():
             st.write(f"**Систематична назва (IUPAC):** {res['iupac_name']}")
             
             st.markdown("---")
-            if res["groups"]:
+            if res["is_direct"]:
+                st.error(f"⚠️ **Речовина вже включена як самостійна позиція до Переліку ПКМУ № 770!**")
+                st.write(, icon="📋")
+                
+                st.markdown("---")
+                st.subheader("📝 Проект висновку експерта:")
+                st.code(
+                    f"Досліджувана речовина ({res['common_name']}) є самостійною позицією у Переліку наркотичних "
+                    f"засобів, психотропних речовин і прекурсорів, затвердженого постановою Кабінету Міністрів України "
+                    f"від 06.05.2000 № 770 ({res['direct_info']}).",
+                    language="text"
+                )
+            elif res["groups"]:
                 for g in res["groups"]:
                     st.success(f"Виявлено структурну відповідність групі: **{g}**")
                 
@@ -116,6 +139,6 @@ if smiles_input.strip():
                     language="text"
                 )
             else:
-                st.warning("Прямих збігів з базовими ядрами підконтрольних груп у межах поточних шаблонів не виявлено.")
+                st.warning("Прямих збігів з самостійними позиціями Переліку № 770 або базовими ядрами похідних у межах поточних шаблонів не виявлено.")
 else:
     st.info("Введіть або вставте рядок SMILES у боковій панелі зліва для початку аналізу.")
