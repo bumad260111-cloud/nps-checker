@@ -9,28 +9,28 @@ st.set_page_config(page_title="Автоматизація віднесення �
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
-# Ініціалізація стану для поля введення
+# Безпечна ініціалізація стану
 if "smiles_val" not in st.session_state:
     st.session_state.smiles_val = "CCN(CC)CCN1C2=C(C=C(C=C2)[N+](=O)[O-])N=C1CC3=CC=C(C=C3)OC4CC4"
 
 st.sidebar.header("Введення структури")
 
-# Поле введення пов'язане зі станом session_state
+# Функція очищення поля
+def clear_text():
+    st.session_state.smiles_val = ""
+
+# Поле введення та кнопки
 smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", key="smiles_val")
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
-clear_btn = col_btn2.button("Очистити")
+clear_btn = col_btn2.button("Очистити", on_click=clear_text)
 
-if clear_btn:
-    st.session_state.smiles_val = ""
-    st.rerun()
-
-# Універсальні та точні SMARTS-шаблони з урахуванням гетероциклів за ПКМУ № 1213
+# Універсальні SMARTS-шаблони згідно з ПКМУ № 1213
 PATTERNS = {
     "Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)": "N1CCC(CC1)N(C(=O))",
     "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13",
-    "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)",
+    "Похідні групи синтетичних катинонів (β-кето)": "c1ccccc1C(=O)C(N)",
     "Похідні групи 2-фенетиламіну": "c1ccccc1CC[NH]",
     "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
