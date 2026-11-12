@@ -23,7 +23,6 @@ col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
 clear_btn = col_btn2.button("Очистити", on_click=clear_text)
 
-# Прямі самостійні позиції згідно з ПКМУ № 770
 DIRECT_LIST_770 = {
     "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
     "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
@@ -59,4 +58,35 @@ def get_pubchem_info(smiles):
     return "Нова психоактивна речовина", "Дані мережі недоступні"
 
 def analyze_molecule(smiles):
-    mol = Chem.MolFromSmiles
+    mol = Chem.MolFromSmiles(smiles)
+    if not mol:
+        return None, "Помилка: невірний формат SMILES."
+
+    mw = Descriptors.MolWt(mol)
+    heavy_atoms_count = mol.GetNumHeavyAtoms()
+    
+    is_direct = smiles in DIRECT_LIST_770
+    matched_groups = []
+    
+    if not is_direct:
+        for group_name, smarts in PATTERNS.items():
+            pattern = Chem.MolFromSmarts(smarts)
+            if pattern and mol.HasSubstructMatch(pattern):
+                matched_groups.append(group_name)
+
+    common_name, iupac_name = get_pubchem_info(smiles)
+
+    return {
+        "mol": mol,
+        "mw": round(mw, 2),
+        "heavy_atoms": heavy_atoms_count,
+        "is_direct": is_direct,
+        "direct_info": DIRECT_LIST_770.get(smiles, ("", ""))[1],
+        "groups": matched_groups,
+        "common_name": common_name,
+        "iupac_name": iupac_name
+    }, None
+
+# Запуск розрахунку по натисканню кнопки «Перевірити» або якщо поле вже містить текст і була дія
+if search_btn and smiles_input.strip():
+    res, err = analyze_molecule(smiles
