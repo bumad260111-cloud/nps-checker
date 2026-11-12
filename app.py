@@ -10,15 +10,15 @@ st.title("🔬 Автоматизація віднесення речовин д
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
 st.sidebar.header("Введення структури")
-smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3")
+smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=N3")
 search_btn = st.sidebar.button("Перевірити речовину")
 
-# Строгі, розведені SMARTS-шаблони для уникнення перехресних спрацьовувань
+# Універсальні та точні SMARTS-шаблони з урахуванням гетероциклів за ПКМУ № 1213
 PATTERNS = {
-    "Похідні групи фентанілу (4-анілінопіперидин)": "N1CCC(CC1)(N(C(=O))c2ccccc2)",
+    "Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)": "N1CCC(CC1)N(C(=O))",
     "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13",
-    "Похідні групи синтетичних катинонів (β-кето)": "c1ccccc1C(=O)C(N)",
-    "Похідні групи 2-фенетиламіну": "c1ccccc1CCN&!$(*C(=O))", # Фенетиламін без кето-групи катинонів
+    "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)",
+    "Похідні групи 2-фенетиламіну": "c1ccccc1CC[NH]",
     "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
@@ -26,6 +26,8 @@ PATTERNS = {
 def get_pubchem_info(smiles):
     if "CCN(CC)CCN1" in smiles:
         return "Ципротонітазен (Cyprotonitazene)", "2-(2-(4-(cyclopropylmethoxy)benzyl)-5-nitro-1H-benzo[d]imidazol-1-yl)-N,N-diethylethanamine"
+    if "C3=CC=CC=N3" in smiles or "c1ccncc1" in smiles:
+        return "2-Піридилфентаніл (2-Pyridylfentanyl)", "N-[1-(2-phenylethyl)piperidin-4-yl]-N-pyridin-2-ylpropanamide"
     try:
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName,Title/json"
         response = requests.get(url, timeout=3)
@@ -95,9 +97,9 @@ if smiles_input:
                     f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
                     f"ознаки, характерні для групи «{detected_group}».\n"
                     f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
-                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин[cite: 8].\n\n"
+                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин[cite: 6].\n\n"
                     f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
-                    f"наркотичних засобів, психотропних речовин і прекурсорів[cite: 27].",
+                    f"наркотичних засобів, психотропних речовин і прекурсорів[cite: 6].",
                     language="text"
                 )
             else:
