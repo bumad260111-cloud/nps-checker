@@ -9,9 +9,22 @@ st.set_page_config(page_title="Автоматизація віднесення �
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
+# Ініціалізація стану для поля введення
+if "smiles_val" not in st.session_state:
+    st.session_state.smiles_val = "CCN(CC)CCN1C2=C(C=C(C=C2)[N+](=O)[O-])N=C1CC3=CC=C(C=C3)OC4CC4"
+
 st.sidebar.header("Введення структури")
-smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=N3")
-search_btn = st.sidebar.button("Перевірити речовину")
+
+# Поле введення пов'язане зі станом session_state
+smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", key="smiles_val")
+
+col_btn1, col_btn2 = st.sidebar.columns(2)
+search_btn = col_btn1.button("Перевірити")
+clear_btn = col_btn2.button("Очистити")
+
+if clear_btn:
+    st.session_state.smiles_val = ""
+    st.rerun()
 
 # Універсальні та точні SMARTS-шаблони з урахуванням гетероциклів за ПКМУ № 1213
 PATTERNS = {
@@ -64,8 +77,8 @@ def analyze_molecule(smiles):
         "iupac_name": iupac_name
     }, None
 
-if smiles_input:
-    res, err = analyze_molecule(smiles_input)
+if smiles_input.strip():
+    res, err = analyze_molecule(smiles_input.strip())
     if err:
         st.error(err)
     else:
@@ -97,10 +110,12 @@ if smiles_input:
                     f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
                     f"ознаки, характерні для групи «{detected_group}».\n"
                     f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
-                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин[cite: 6].\n\n"
+                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин.\n\n"
                     f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
-                    f"наркотичних засобів, психотропних речовин і прекурсорів[cite: 6].",
+                    f"наркотичних засобів, психотропних речовин і прекурсорів.",
                     language="text"
                 )
             else:
                 st.warning("Прямих збігів з базовими ядрами підконтрольних груп у межах поточних шаблонів не виявлено.")
+else:
+    st.info("Введіть або вставте рядок SMILES у боковій панелі зліва для початку аналізу.")
