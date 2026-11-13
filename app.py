@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem.Draw import MolToImage
@@ -28,13 +29,22 @@ col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
 clear_btn = col_btn2.button("Очистити", on_click=clear_fields)
 
-# Тільки реальні підконтрольні позиції ПКМУ № 770
-DIRECT_LIST_770 = {
-    "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
-    "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
-    "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
-    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
-}
+# Завантаження бази даних контролю (з substances.csv або базовий словник)
+@st.cache_data
+def load_substances_db():
+    try:
+        df = pd.read_csv("substances.csv")
+        return {row['smiles']: (row['name'], row['category']) for _, row in df.iterrows()}
+    except Exception:
+        return {
+            "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
+            "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
+            "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
+            "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
+            "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14": ("AM-2201", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
+        }
+
+DIRECT_LIST_770 = load_substances_db()
 
 PATTERNS = {
     "Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)": "N1CCC(CC1)N(C(=O))",
@@ -48,6 +58,7 @@ PATTERNS = {
 OFFLINE_INCHI_MAP = {
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамін
+    "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14", # AM-2201
 }
 
 def get_smiles_from_inchikey(inchi_key):
