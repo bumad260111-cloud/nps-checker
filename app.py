@@ -103,10 +103,10 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
 
-    # 7. Похідні бензилімідазолу (нітазени)
+        # 7. Похідні бензилімідазолу (нітазени) - універсальний шаблон ядра
     nitazene_smarts = [
-        Chem.MolFromSmarts("n1c(CN)nc2ccc([N+](=O)[O-])cc12"),
-        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13")
+        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"), # бензилімідазол з нітрогрупою
+        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")    # альтернативний напрямок обходу
     ]
     if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
