@@ -54,9 +54,14 @@ def analyze_molecule(smiles):
     # SMARTS-патерни для перевірки груп
     groups_found = []
     
-    # Виправлений та точний SMARTS-шаблон для похідних групи фентанілу (4-анілінопіперидин)
-    fentanyl_smarts = Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3")
-    if fentanyl_smarts and mol.HasSubstructMatch(fentanyl_smarts):
+    # Гнучкіші SMARTS-патерни для групи фентанілу (4-анілінопіперидин)
+    fentanyl_smarts_1 = Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3")
+    fentanyl_smarts_2 = Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3")
+    fentanyl_smarts_3 = Chem.MolFromSmarts("N1CCC(CC1)N(C(=O))c2ccccc2")
+    
+    if (fentanyl_smarts_1 and mol.HasSubstructMatch(fentanyl_smarts_1)) or \
+       (fentanyl_smarts_2 and mol.HasSubstructMatch(fentanyl_smarts_2)) or \
+       (fentanyl_smarts_3 and mol.HasSubstructMatch(fentanyl_smarts_3)):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
     # SMARTS-патерн для заміщених фенетиламінів / амфетамінів
