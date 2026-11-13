@@ -16,50 +16,15 @@ if "smiles_val" not in st.session_state:
 if "inchi_val" not in st.session_state:
     st.session_state.inchi_val = ""
 
-if "resolved_smiles_val" not in st.session_state:
-    st.session_state.resolved_smiles_val = ""
-
 st.sidebar.header("Введення структури")
 
 def clear_fields():
     st.session_state.smiles_val = ""
     st.session_state.inchi_val = ""
-    st.session_state.resolved_smiles_val = ""
 
-def get_smiles_from_inchikey(inchi_key):
-    clean_key = inchi_key.strip()
-    if not clean_key:
-        return None
-    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            props = data.get('PropertyTable', {}).get('Properties', [])
-            if props:
-                return props[0].get('CanonicalSMILES')
-    except Exception as e:
-        st.error(f"Помилка запиту до PubChem: {e}")
-    return None
-
-# Обробник зміни InChIKey (працює автоматично при вводі у 2-гу строку)
-def on_inchi_change():
-    inchi = st.session_state.inchi_val.strip()
-    if inchi:
-        resolved = get_smiles_from_inchikey(inchi)
-        if resolved:
-            st.session_state.resolved_smiles_val = resolved
-        else:
-            st.session_state.resolved_smiles_val = "Не знайдено в PubChem за цим InChIKey"
-
-# 1-й рядок: Введення SMILES
+# Тільки два чітких поля: SMILES та InChIKey
 smiles_input = st.sidebar.text_input("1. Введіть SMILES з'єднання:", key="smiles_val")
-
-# 2-й рядок: Введення InChIKey (з автовикликом конвертації)
-inchi_input = st.sidebar.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchi_val", on_change=on_inchi_change)
-
-# 3-й рядок: Визначений / Результуючий SMILES (звідси можна копіювати)
-resolved_smiles_input = st.sidebar.text_input("3. Визначений SMILES (скопіюйте сюди або в 1-у строку):", key="resolved_smiles_val")
+inchi_input = st.sidebar.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchi_val")
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
@@ -80,6 +45,22 @@ PATTERNS = {
     "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
+
+def get_smiles_from_inchikey(inchi_key):
+    clean_key = inchi_key.strip()
+    if not clean_key:
+        return None
+    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            props = data.get('PropertyTable', {}).get('Properties', [])
+            if props:
+                return props[0].get('CanonicalSMILES')
+    except Exception as e:
+        st.error(f"Помилка запиту до PubChem: {e}")
+    return None
 
 def get_pubchem_info(smiles):
     if smiles in DIRECT_LIST_770:
@@ -136,10 +117,20 @@ def analyze_molecule(smiles):
     }, None
 
 if search_btn:
-    # Пріоритет у першої строки, якщо там пусто — беремо з 3-ї строки
-    target_smiles = smiles_input.strip() if smiles_input.strip() else resolved_smiles_input.strip()
+    target_smiles = smiles_input.strip()
+    
+    # Якщо перше поле порожнє, але введено InChIKey — конвертуємо "на льоту" при натисканні Перевірити
+    if not target_smiles and inchi_input.strip():
+        with st.spinner("Пошук структури за InChIKey через PubChem..."):
+            resolved = get_smiles_from_inchikey(inchi_input.strip())
+            if resolved:
+                target_smiles = resolved
+                st.session_state.smiles_val = resolved  # Автоматично заповнюємо перше поле SMILES
+                st.success(f"Успіх: InChIKey конвертовано у SMILES -> {resolved}")
+            else:
+                st.error("Не вдалося знайти сполуку в базі PubChem за введеним InChIKey.")
 
-    if target_smiles and not target_smiles.startswith("Не знайдено"):
+    if target_smiles:
         res, err = analyze_molecule(target_smiles)
         if err:
             st.error(err)
@@ -201,6 +192,6 @@ if search_btn:
                 else:
                     st.warning("Прямих збігів з самостійними позиціями Переліку № 770 або базовими ядрами похідних у межах поточних шаблонів не виявлено.")
     else:
-        st.warning("Будь ласка, введіть коректний SMILES або InChIKey для перевірки.")
+        st.warning("Будь ласка, введіть SMILES або InChIKey для перевірки.")
 else:
-    st.info("Введіть InChIKey у 2-гу строку (SMILES з'явиться в 3-й строці) або введіть SMILES у 1-у строку та натисніть «Перевірити».")
+    st.info("Введіть SMILES у 1-у строку або InChIKey у 2-гу строку та натисніть «Перевірити».")
