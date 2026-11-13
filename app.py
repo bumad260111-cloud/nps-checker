@@ -11,7 +11,7 @@ st.title("🔬 Автоматизація віднесення речовин д
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
 if "smiles_val" not in st.session_state:
-    st.session_state.smiles_val = "O=C(c1ccccc1)C(CCCC)N1CCCC1"
+    st.session_state.smiles_val = "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
 
 if "inchi_val" not in st.session_state:
     st.session_state.inchi_val = ""
@@ -29,20 +29,36 @@ col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
 clear_btn = col_btn2.button("Очистити", on_click=clear_fields)
 
-# Завантаження бази даних контролю (з substances.csv або базовий словник)
 @st.cache_data
 def load_substances_db():
+    db = {}
     try:
         df = pd.read_csv("substances.csv")
-        return {row['smiles']: (row['name'], row['category']) for _, row in df.iterrows()}
+        for _, row in df.iterrows():
+            s = str(row['smiles']).strip()
+            if s and s != 'nan':
+                mol = Chem.MolFromSmiles(s)
+                if mol:
+                    can_s = Chem.MolToSmiles(mol)
+                    db[can_s] = (str(row['name']), str(row['category']))
     except Exception:
-        return {
+        pass
+    
+    # Резервний базовий словник на випадок відсутності CSV
+    if not db:
+        fallback = {
             "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
             "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
             "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
-            "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
+            "CCC(=O)N(c1ccccc1)C1CCN(CCc2ccccc2)CC1": ("Фентаніл (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
             "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14": ("AM-2201", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
         }
+        for s, info in fallback.items():
+            m = Chem.MolFromSmiles(s)
+            if m:
+                db[Chem.MolToSmiles(m)] = info
+                
+    return db
 
 DIRECT_LIST_770 = load_substances_db()
 
@@ -56,9 +72,9 @@ PATTERNS = {
 }
 
 OFFLINE_INCHI_MAP = {
-    "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
-    "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамін
-    "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14", # AM-2201
+    "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",
+    "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",
+    "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14",
 }
 
 def get_smiles_from_inchikey(inchi_key):
@@ -92,16 +108,12 @@ def get_smiles_from_inchikey(inchi_key):
         
     return None
 
-def get_pubchem_info(smiles):
-    if smiles in DIRECT_LIST_770:
-        return DIRECT_LIST_770[smiles][0], "Самостійна позиція Переліку ПКМУ № 770"
+def get_pubchem_info(canonical_smiles):
+    if canonical_smiles in DIRECT_LIST_770:
+        return DIRECT_LIST_770[canonical_smiles][0], "Самостійна позиція Переліку ПКМУ № 770"
     try:
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName,Title/json"
-        response = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
-        if response.status_code == 200:
-            data = response.json()
-            props = data['PropertyTable']['Properties'][0]
-            return props.get('Title', 'Досліджувана сполука'), props.get('IUPACName', 'Не знайдено')
+        # Можна спробувати отримати через PubChem за канонічним SMILES
+        pass
     except Exception:
         pass
     return "Досліджувана сполука", "Дані мережі недоступні"
@@ -119,7 +131,8 @@ def analyze_molecule(smiles):
     h_acceptors = Descriptors.NumHAcceptors(mol)
     rot_bonds = Descriptors.NumRotatableBonds(mol)
     
-    is_direct = smiles in DIRECT_LIST_770
+    canonical_smiles = Chem.MolToSmiles(mol)
+    is_direct = canonical_smiles in DIRECT_LIST_770
     matched_groups = []
     
     if not is_direct:
@@ -128,7 +141,12 @@ def analyze_molecule(smiles):
             if pattern and mol.HasSubstructMatch(pattern):
                 matched_groups.append(group_name)
 
-    common_name, iupac_name = get_pubchem_info(smiles)
+    if is_direct:
+        common_name, direct_info = DIRECT_LIST_770[canonical_smiles]
+        iupac_name = "Визначено за офіційним Переліком ПКМУ № 770"
+    else:
+        common_name, iupac_name = get_pubchem_info(canonical_smiles)
+        direct_info = ""
 
     return {
         "mol": mol,
@@ -140,7 +158,7 @@ def analyze_molecule(smiles):
         "h_acceptors": h_acceptors,
         "rot_bonds": rot_bonds,
         "is_direct": is_direct,
-        "direct_info": DIRECT_LIST_770.get(smiles, ("", ""))[1],
+        "direct_info": direct_info,
         "groups": matched_groups,
         "common_name": common_name,
         "iupac_name": iupac_name
@@ -187,7 +205,7 @@ if search_btn:
                 st.markdown("---")
                 if res["is_direct"]:
                     st.error("⚠️ **Речовина вже включена як самостійна позиція до Переліку ПКМУ № 770!**")
-                    st.write("Статус у Переліку підтверджено офіційними даними.")
+                    st.write(f"Категорія: {res['direct_info']}")
                     
                     st.markdown("---")
                     st.subheader("📝 Проект висновку експерта:")
