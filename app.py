@@ -13,12 +13,17 @@ st.caption("Експертна служба МВС України (згідно 
 if "smiles_val" not in st.session_state:
     st.session_state.smiles_val = "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3"
 
+if "inchi_val" not in st.session_state:
+    st.session_state.inchi_val = ""
+
 st.sidebar.header("Введення структури")
 
 def clear_fields():
     st.session_state.smiles_val = ""
+    st.session_state.inchi_val = ""
 
-smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", key="smiles_val")
+smiles_input = st.sidebar.text_input("1. Введіть SMILES з'єднання:", key="smiles_val")
+inchi_input = st.sidebar.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchi_val")
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
@@ -46,6 +51,7 @@ def load_substances_db():
             "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
             "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
             "CCC(=O)N(c1ccccc1)C1CCN(CCc2ccccc2)CC1": ("Фентаніл (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
+            "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14": ("AM-2201", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
         }
         for s, info in fallback.items():
             m = Chem.MolFromSmiles(s)
@@ -56,19 +62,60 @@ def load_substances_db():
 
 DIRECT_LIST_770 = load_substances_db()
 
-# Виправлені SMARTS-шаблони (включно з універсальним паттерном для заміщених індолів/індазолів канабіноїдів)
 PATTERNS = {
     "Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)": "N1CCC(CC1)N(C(=O))",
     "Похідні групи нітазену (Бензимідазольні опіоїди)": "n1c(Cc2ccccc2)nc3ccccc13",
     "Похідні групи синтетичних катинонов (β-кето)": "c1ccccc1C(=O)C(N)",
     "Похідні групи 2-фенетиламіну": "c1ccccc1CC[NH]",
-    "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(cN2)C(=O)",
+    "Похідні групи синтетичних канабіноїдів (Індоли/Індазоли)": "c1ccc2c(c1)c(c[nH]2)C(=O)",
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
+
+OFFLINE_INCHI_MAP = {
+    "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",
+    "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",
+    "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14",
+}
+
+def get_smiles_from_inchikey(inchi_key):
+    clean_key = inchi_key.strip()
+    if not clean_key:
+        return None
+        
+    if clean_key in OFFLINE_INCHI_MAP:
+        return OFFLINE_INCHI_MAP[clean_key]
+
+    url_cactus = f"https://cactus.nci.nih.gov/chemical/structure/{clean_key}/smiles"
+    try:
+        response = requests.get(url_cactus, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code == 200:
+            smiles = response.text.strip()
+            if smiles and not smiles.startswith("<"):
+                return smiles
+    except Exception:
+        pass
+
+    url_pubchem = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
+    try:
+        response = requests.get(url_pubchem, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code == 200:
+            data = response.json()
+            props = data.get('PropertyTable', {}).get('Properties', [])
+            if props:
+                return props[0].get('CanonicalSMILES')
+    except Exception:
+        pass
+        
+    return None
 
 def get_pubchem_info(canonical_smiles):
     if canonical_smiles in DIRECT_LIST_770:
         return DIRECT_LIST_770[canonical_smiles][0], "Самостійна позиція Переліку ПКМУ № 770"
+    try:
+        # Можна спробувати отримати через PubChem за канонічним SMILES
+        pass
+    except Exception:
+        pass
     return "Досліджувана сполука", "Дані мережі недоступні"
 
 def analyze_molecule(smiles):
@@ -120,6 +167,15 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
+    if not target_smiles and inchi_input.strip():
+        with st.spinner("Конвертація InChIKey..."):
+            resolved = get_smiles_from_inchikey(inchi_input.strip())
+            if resolved:
+                target_smiles = resolved
+                st.success(f"Успіх: InChIKey успішно розпізнано -> {resolved}")
+            else:
+                st.error("Не вдалося знайти сполуку. Введіть SMILES безпосередньо у перше поле.")
+
     if target_smiles:
         res, err = analyze_molecule(target_smiles)
         if err:
@@ -182,6 +238,6 @@ if search_btn:
                 else:
                     st.warning("✅ **Прямих збігів або ознак похідних за критеріями ПКМУ № 770 / № 1213 не виявлено.** Речовина не підпадає під дію зазначених списків контролю.")
     else:
-        st.warning("Будь ласка, введіть SMILES для перевірки.")
+        st.warning("Будь ласка, введіть SMILES або InChIKey для перевірки.")
 else:
-    st.info("Введіть SMILES у поле та натисніть «Перевірити».")
+    st.info("Введіть SMILES у 1-у строку або InChIKey у 2-гу строку та натисніть «Перевірити».")
