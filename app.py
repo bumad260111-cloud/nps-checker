@@ -45,7 +45,6 @@ PATTERNS = {
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
 
-# Офлайн-словник найвідоміших InChIKey для миттєвої конвертації без збоїв мережі
 OFFLINE_INCHI_MAP = {
     "RYYVLZVVIJVGH-UHFFFAOYSA-N": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", # Кофеїн
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
@@ -57,11 +56,9 @@ def get_smiles_from_inchikey(inchi_key):
     if not clean_key:
         return None
         
-    # 1. Спочатку перевіряємо локальний офлайн-словник (працює завжди миттєво)
     if clean_key in OFFLINE_INCHI_MAP:
         return OFFLINE_INCHI_MAP[clean_key]
 
-    # 2. Резервний запит через NIH/Cactus
     url_cactus = f"https://cactus.nci.nih.gov/chemical/structure/{clean_key}/smiles"
     try:
         response = requests.get(url_cactus, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
@@ -72,7 +69,6 @@ def get_smiles_from_inchikey(inchi_key):
     except Exception:
         pass
 
-    # 3. Резервний запит через PubChem
     url_pubchem = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
     try:
         response = requests.get(url_pubchem, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
@@ -143,12 +139,12 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
+    # Если первое поле пустое, но введен InChIKey — конвертируем в локальную переменную
     if not target_smiles and inchi_input.strip():
         with st.spinner("Конвертація InChIKey..."):
             resolved = get_smiles_from_inchikey(inchi_input.strip())
             if resolved:
                 target_smiles = resolved
-                st.session_state.smiles_val = resolved
                 st.success(f"Успіх: InChIKey успішно розпізнано -> {resolved}")
             else:
                 st.error("Не вдалося знайти сполуку. Введіть SMILES безпосередньо у перше поле.")
