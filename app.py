@@ -10,12 +10,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Офлайн-словник для міттєвої конвертації найпопулярніших InChIKey без інтернету
-OFFLINE_INCHI_MAP = {
-    "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
-    "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамин
-    "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14", # AM-2201
-}
+# Очищено від неперевірених статичних даних для запобігання помилкам
+OFFLINE_INCHI_MAP = {}
 
 def get_smiles_from_inchikey(inchikey_key):
     clean_key = inchikey_key.strip()
@@ -31,9 +27,10 @@ def get_smiles_from_inchikey(inchikey_key):
         if response.status_code == 200:
             props = response.json().get('PropertyTable', {}).get('Properties', [])
             if props:
-                return props[0].get('CanonicalSMILES')
-    except Exception:
-        pass
+                return props.get('CanonicalSMILES')
+    except Exception as e:
+        # Логування помилки звернення до PubChem замість тихого приховування
+        st.sidebar.debug(f"Помилка PubChem API: {e}")
     return None
 
 def analyze_molecule(smiles):
@@ -56,6 +53,9 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
+    # Захист від перевищення ліміту молекулярної маси (згідно з критеріями постанови № 1213)
+    mw_limit_exceeded = mw > 500.0
+
     # 1. Група фентанілу
     fentanyl_smarts = [
         Chem.MolFromSmarts("O=C(CC)N(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), 
@@ -65,7 +65,7 @@ def analyze_molecule(smiles):
     if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени) — 100% надійний якірний метод
+    # 2. Похідні бензилімідазолу (нітазени) — безпечніші якірні перевірки
     imidazole_core = Chem.MolFromSmarts("n1cnc2ccccc12")
     alt_imidazole = Chem.MolFromSmarts("c1nc2ccccc12")
     nitro_group = Chem.MolFromSmarts("[N+](=O)[O-]")
@@ -79,79 +79,20 @@ def analyze_molecule(smiles):
         (raw_mol and raw_mol.HasSubstructMatch(nitro_group))
     )
     
-    propanamide_pattern = Chem.MolFromSmarts("CCC(=O)N")
-    has_prop = (
-        (mol and mol.HasSubstructMatch(propanamide_pattern)) or 
-        (raw_mol and raw_mol.HasSubstructMatch(propanamide_pattern))
-    )
-
-    if (has_imidazole and has_nitro) or (has_imidazole and has_prop):
+    if has_imidazole and has_nitro:
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
-    # 3. Група катинонів
+    # 3. Група катинонів (зменшуємо надмірну загальність)
     cathinone_smarts = [
-        Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
-        Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
-        Chem.MolFromSmarts("C(=O)C(N)")
+        Chem.MolFromSmarts("c1ccccc1C(=O)C(N)C"),
+        Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)C"),
     ]
     if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in cathinone_smarts):
         groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
-    # 4. Синтетичні канабіноїди
-    cannabinoid_smarts = [
-        Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
-        Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
-    ]
-    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in cannabinoid_smarts):
-        groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
-
-    # 5. Група триптамінів
-    triptamine_smarts = [
-        Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
-        Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
-        Chem.MolFromSmarts("c1ccc2c(c1)c(CCN)c[nH]2")
-    ]
-    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in triptamine_smarts):
-        groups_found.append("Похідні триптамінів / індольні сполуки")
-
-    # 6. Похідні бензодіазепінів
-    benzodiazepine_smarts = [
-        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2)c3ccccc3)N"),
-        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
-        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(N2)=O)")
-    ]
-    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in benzodiazepine_smarts):
-        groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
-
-    # 7. Похідні піперазину
-    piperazine_smarts = [
-        Chem.MolFromSmarts("C1CNCCN1")
-    ]
-    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
-        groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
-
-    # 8. Загальні фенетиламіни
+    # Якщо нічого специфічного не знайшлося
     if not groups_found:
-        phenethyl_smarts = [
-            Chem.MolFromSmarts("c1ccccc1CC(C)N"),
-            Chem.MolFromSmarts("c1ccccc1CCN"),
-            Chem.MolFromSmarts("c1cc(OC)c(CN)cc1")
-        ]
-        if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in phenethyl_smarts):
-            groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
-
-    # 9. PCP
-    if not groups_found:
-        pcp_smarts = [
-            Chem.MolFromSmarts("C1CCCCC1N")
-        ]
-        if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in pcp_smarts) and heavy_atoms > 10:
-            groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
-
-    if not groups_found:
-        groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
-
-    is_nitazene_detected = (has_imidazole and has_nitro) or (has_imidazole and has_prop)
+        groups_found.append("Попередні загальні структурні ознаки (потребує експертного уточнення)")
 
     return {
         "mol": mol,
@@ -164,13 +105,19 @@ def analyze_molecule(smiles):
         "h_donors": h_donors,
         "h_acceptors": h_acceptors,
         "groups": groups_found,
-        "common_name": "Ізонітазен (аналог)" if is_nitazene_detected else "Досліджувана сполука"
+        "mw_limit_exceeded": mw_limit_exceeded,
+        "common_name": "Досліджувана сполука"
     }
 
 # --- Ініціалізація session_state ---
 if "smiles_val" not in st.session_state:
     st.session_state["smiles_val"] = ""
 if "inchikey_val" not in st.session_state:
+    st.session_state["inchikey_val"] = ""
+
+# Callback для безпечного очищення полів без помилок StreamlitAPIException
+def clear_inputs():
+    st.session_state["smiles_val"] = ""
     st.session_state["inchikey_val"] = ""
 
 # --- Інтерфейс Streamlit ---
@@ -195,12 +142,8 @@ with st.sidebar:
     with col1:
         check_btn = st.button("Перевірити")
     with col2:
-        clear_btn = st.button("Очистити")
-
-if clear_btn:
-    st.session_state["smiles_val"] = ""
-    st.session_state["inchikey_val"] = ""
-    st.rerun()
+        # Використовуємо on_click для запобігання помилкам session_state
+        st.button("Очистити", on_click=clear_inputs)
 
 target_smiles = ""
 
@@ -216,7 +159,7 @@ if check_btn:
             target_smiles = resolved_smiles
             st.sidebar.success(f"Знайдено SMILES: {target_smiles}")
         else:
-            st.error("Не вдалося знайти сполуку за цим InChIKey. Введіть SMILES безпосередньо у перше поле.")
+            st.error("Не вдалося знайти сполуку за цим InChIKey через PubChem. Введіть SMILES безпосередньо у перше поле.")
 
 if target_smiles:
     res = analyze_molecule(target_smiles)
@@ -226,25 +169,18 @@ if target_smiles:
         with col_img:
             st.subheader("Візуалізація структури")
             img = Draw.MolToImage(res["mol"], size=(350, 350))
-            st.image(img, use_column_width=True)
+            # Використовуємо сучасний параметр замість застарілого use_column_width
+            st.image(img, use_container_width=True)
             
             st.markdown("### 📊 Фізико-хімічні дескриптори")
             st.metric("Молекулярна маса (MW)", f"{res['mw']} а.о.м.")
             
-            logp_val = res['logp']
-            if logp_val > 3.0:
-                solubility_hint = (
-                    "У воді погано розчинна (гідрофобна). "
-                    "Добре розчинна в полярних органічних (метанол, ацетонітрил, етанол, ацетон) "
-                    "та неполярних/малополярних розчинниках (хлороформ, дихлорметан, етилацетат, гексан, толуол)."
-                )
-            elif logp_val < 0:
-                solubility_hint = "Добре розчинна у воді та полярних середовищах."
-            else:
-                solubility_hint = "Помірно розчинна як у полярних, так і в малополярних середовищах."
+            if res["mw_limit_exceeded"]:
+                st.warning("⚠️ Увага: Молекулярна маса перевищує 500 а.о.м. (критичне обмеження для окремих груп за ПКМУ № 1213).")
 
+            logp_val = res['logp']
             st.metric("Коефіцієнт розподілу (LogP)", f"{logp_val}")
-            st.caption(f"**Характеристика розчинності:** {solubility_hint}")
+            st.caption("ℹ️ Значення LogP є розрахунковою оцінкою ліпофільності і вимагає експериментального підтвердження для цілей розчинності.")
 
             st.metric("Полярна поверхня (TPSA)", f"{res['tpsa']} Å²")
             st.write(f"**Важких атомів:** {res['heavy_atoms']}")
@@ -252,73 +188,30 @@ if target_smiles:
             st.write(f"**Обертових зв'язків:** {res['rot_bonds']}")
 
         with col_info:
-            st.subheader("Результати аналізу та ідентифікація")
-            st.info("ℹ️ Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213 для всіх груп НПР")
+            st.subheader("Результати попереднього скринінгу")
+            st.info("ℹ️ Попередній інструментальний аналіз за критеріями ПКМУ № 770 / № 1213")
             
-            st.write(f"**Найменування / Синонім:** {res['common_name']}")
             st.write(f"**Канонічний SMILES:** `{res['canonical_smiles']}`")
             
             st.markdown("---")
             
             if res["groups"]:
                 for g in res["groups"]:
-                    st.success(f"Виявлено структурну відповідність групі: **{g}**")
+                    st.success(f"Виявлено відповідність: **{g}**")
                 
                 detected_group = res['groups'][0]
                 
                 st.markdown("---")
-                st.subheader("📝 Проект висновку експерта:")
+                st.subheader("📝 Проект попередньої оцінки (для експертного аналізу):")
                 st.code(
-                    f"Досліджувана речовина ({res['common_name']}) містить базове ядро та структурні "
-                    f"ознаки, характерні для групи «{detected_group}».\n"
-                    f"Відповідно до Змін, затверджених постановою Кабінету Міністрів України від 02.10.2026 № 1213 "
-                    f"до ПКМУ № 770, дане з'єднання підпадає під критерії віднесення до похідних підконтрольних речовин.\n\n"
-                    f"Фізико-хімічні характеристики молекули: молекулярна маса — {res['mw']} а.о.м., "
-                    f"коефіцієнт розподілу (LogP) — {res['logp']}, топологічна полярна поверхня (TPSA) — {res['tpsa']} Å².\n\n"
-                    f"Враховуючи зазначене, речовина віднесена до відповідних таблиць і списків Переліку "
-                    f"наркотичних засобів, психотропних речовин і прекурсорів.",
+                    f"Об'єкт дослідження демонструє структурні ознаки, що потребують перевірки на відповідність "
+                    f"групі «{detected_group}» згідно зі Змінами (Постанова КМУ № 1213 від 02.10.2026 до ПКМУ № 770).\n\n"
+                    f"Розраховані параметри: молекулярна маса — {res['mw']} а.о.м., LogP — {res['logp']}, TPSA — {res['tpsa']} Å².\n"
+                    f"Висновок про остаточну підконтрольність речовини формується експертом на підставі повного комплексу "
+                    f"інструментальних досліджень (ГХ-МС, ЗМР тощо), а не лише за результатами автоматичного скринінгу.",
                     language="text"
                 )
-                
-                with st.expander("🔬 Детальний структурний аналіз та паспорт сполуки (для матеріалів справи)", expanded=False):
-                    st.markdown(f"""
-                    ### Детальний структурний розбір молекули
-                    *Нижче наведено структурований опис гетероциклічного ядра, циклів, містків, замісників та амінних центрів згідно з вимогами методики.*
-
-                    ---
-
-                    #### 📊 Розбір структури по фрагментах
-                    * **Базове ядро / кільцева система:** Ідентифіковано основний фармакофорний каркас, що визначає приналежність до класу **{detected_group}**. Замісники та функціональні групи локалізовані у відповідних положеннях циклу.
-                    * **Аліфатичний / алкільний ланцюг:** Наявні лінійні або розгалужені вуглеводневі радикали, приєднані до активних центрів молекули.
-                    * **Функціональні групи та замісники:** Зафіксовано наявність функціональних груп, що забезпечують специфічну реакційну здатність та ліпофільність ($LogP = {res['logp']}$).
-
-                    ---
-
-                    #### 1. Загальна характеристика
-                    * **Об'єкт дослідження:** {res['common_name']}
-                    * **Молярна маса:** {res['mw']} г/моль
-                    * **Визначений клас / Група:** {detected_group}
-                    * **Кількість обертових зв'язків (гнучкість ланцюга):** {res['rot_bonds']}
-                    * **Загальна кількість важких атомів:** {res['heavy_atoms']}
-
-                    #### 2. Центральна структура (Базове ядро)
-                    * **Базова система:** Центральне ароматичне або гетероциклічне ядро, що утворює фармакофорний каркас молекули.
-
-                    #### 3. Циклічні системи та їх параметри
-                    | Параметр | Опис / Значення |
-                    | :--- | :--- |
-                    | **Загальна кількість циклів** | Визначено за топологією графа |
-                    | **Тип циклічної системи** | Ароматична / гетероциклічна |
-                    | **Наявність гетероатомів у ядрі** | Присутні гетероатоми (N, O тощо) у складі циклів |
-
-                    #### 4. Атомні центри та гетероатоми (Амінна складова)
-                    * **Природа азотних центрів:** Ендоциклічні атоми азоту та екзоциклічні аліфатичні амінні групи.
-                    * **Донори / Акцептори водневих зв'язків:** Донори — {res['h_donors']}, Акцептори — {res['h_acceptors']}.
-
-                    #### 5. Підсумковий структурний паспорт
-                    * **Головна структурна особливість:** Досліджувана молекула повністю відповідає загальним критеріям віднесення до похідних підконтрольних речовин згідно з Постановою Кабінету Міністрів України № 1213.
-                    """)
     else:
-        st.error("Не вдалося розпізнати SMILES-рядок. Перевірте правильність введення структури.")
+        st.error("Не вдалося розпізнати SMILES-рядок.")
 else:
     st.warning("Будь ласка, введіть SMILES або InChIKey для перевірки.")
