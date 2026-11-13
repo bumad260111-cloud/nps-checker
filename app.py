@@ -49,7 +49,6 @@ def analyze_molecule(smiles):
     rot_bonds = Descriptors.NumRotatableBonds(mol)
     h_donors = Descriptors.NumHDonors(mol)
     h_acceptors = Descriptors.NumHAcceptors(mol)
-    formula = Chem.MolToSmiles(mol) # або формула через rdkit.Chem.rdMolDescriptors
     
     groups_found = []
     
@@ -128,6 +127,12 @@ def analyze_molecule(smiles):
         "common_name": "Досліджувана сполука"
     }
 
+# --- Ініціалізація session_state для полів вводу ---
+if "smiles_val" not in st.session_state:
+    st.session_state["smiles_val"] = ""
+if "inchikey_val" not in st.session_state:
+    st.session_state["inchikey_val"] = ""
+
 # --- Інтерфейс Streamlit ---
 
 st.title("🔬 Автоматизація віднесення речовин до похідних")
@@ -135,8 +140,10 @@ st.caption("Експертна служба МВС України (згідно 
 
 with st.sidebar:
     st.header("Введення структури")
-    smiles_input = st.text_area("1. Введіть SMILES з'єднання:", placeholder="Наприклад: CCC(=O)N(...)")
-    inchikey_input = st.text_input("2. Або введіть InChIKey (наприклад з NIST):", placeholder="FDEYROXLYFBBPU-...")
+    
+    # Використовуємо ключі через session_state для коректного очищення
+    smiles_input = st.text_area("1. Введіть SMILES з'єднання:", key="smiles_val", placeholder="Наприклад: CCC(=O)N(...)")
+    inchikey_input = st.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchikey_val", placeholder="FDEYROXLYFBBPU-...")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -145,6 +152,8 @@ with st.sidebar:
         clear_btn = st.button("Очистити")
 
 if clear_btn:
+    st.session_state["smiles_val"] = ""
+    st.session_state["inchikey_val"] = ""
     st.rerun()
 
 target_smiles = ""
