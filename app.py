@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Офлайн-словник для миттєвої конвертації найпопулярніших InChIKey без інтернету
+# Офлайн-словник для міттєвої конвертації найпопулярніших InChIKey без інтернету
 OFFLINE_INCHI_MAP = {
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамин
@@ -24,7 +24,6 @@ def get_smiles_from_inchikey(inchi_key):
     if clean_key in OFFLINE_INCHI_MAP:
         return OFFLINE_INCHI_MAP[clean_key]
     
-    # Запит до PubChem, якщо ключ відсутній в офлайн-словнику
     import requests
     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
     try:
@@ -37,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Логіка аналізу та пошуку структурних відповідностей
+# Розширена логіка аналізу для всіх 6 основних груп
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -51,27 +50,61 @@ def analyze_molecule(smiles):
     h_donors = Descriptors.NumHDonors(mol)
     h_acceptors = Descriptors.NumHAcceptors(mol)
     
-    # SMARTS-патерни для перевірки груп
     groups_found = []
     
-    # Гнучкіші SMARTS-патерни для групи фентанілу (4-анілінопіперидин)
-    fentanyl_smarts_1 = Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3")
-    fentanyl_smarts_2 = Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3")
-    fentanyl_smarts_3 = Chem.MolFromSmarts("N1CCC(CC1)N(C(=O))c2ccccc2")
-    
-    if (fentanyl_smarts_1 and mol.HasSubstructMatch(fentanyl_smarts_1)) or \
-       (fentanyl_smarts_2 and mol.HasSubstructMatch(fentanyl_smarts_2)) or \
-       (fentanyl_smarts_3 and mol.HasSubstructMatch(fentanyl_smarts_3)):
+    # 1. Група фентанілу (4-анілінопіперидин)
+    fentanyl_smarts = [
+        Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3"),
+        Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3"),
+        Chem.MolFromSmarts("N1CCC(CC1)N(C(=O))c2ccccc2")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # SMARTS-патерн для заміщених фенетиламінів / амфетамінів
-    phenethyl_smarts = Chem.MolFromSmarts("c1ccccc1CC(C)N")
-    if phenethyl_smarts and mol.HasSubstructMatch(phenethyl_smarts):
+    # 2. Група триптамінів / індольних сполук (серотонін, триптаміни)
+    triptamine_smarts = [
+        Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
+        Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
+        Chem.MolFromSmarts("c1ccc2c(c1)c(CCN)c[nH]2")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
+        groups_found.append("Похідні триптамінів / індольні сполуки")
+
+    # 3. Група фенетиламінів / амфетамінів
+    phenethyl_smarts = [
+        Chem.MolFromSmarts("c1ccccc1CC(C)N"),
+        Chem.MolFromSmarts("c1ccccc1CCN")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
         groups_found.append("Похідні фенетиламінів / амфетамінів")
 
-    # Якщо специфічні патерни не спрацювали
+    # 4. Група катинонів (бета-кето-фенетиламіни, альфа-PVP)
+    cathinone_smarts = [
+        Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
+        Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
+        Chem.MolFromSmarts("C(=O)C(N)")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
+        groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
+
+    # 5. Група фенциклідину (PCP / циклогексиламіни)
+    pcp_smarts = [
+        Chem.MolFromSmarts("C1CCCCC1N")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in pcp_smarts) and heavy_atoms > 10:
+        groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
+
+    # 6. Синтетичні канабіноїди (амідо-, кето-індоли/індазоли)
+    cannabinoid_smarts = [
+        Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
+        Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
+        groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
+
+    # Універсальний підсумок, якщо структура складна або комбінована
     if not groups_found:
-        groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин")
+        groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
 
     return {
         "mol": mol,
@@ -151,7 +184,7 @@ if target_smiles:
                 
                 detected_group = res['groups'][0]
                 
-                # 1. Основне вікно: Проект висновку експерта (короткий та юридично вивірений)
+                # 1. Основне вікно: Проект висновку експерта
                 st.markdown("---")
                 st.subheader("📝 Проект висновку експерта:")
                 st.code(
@@ -166,7 +199,7 @@ if target_smiles:
                     language="text"
                 )
                 
-                # 2. Окреме вікно розширених даних (деталізація для матеріалів справи)
+                # 2. Розширені дані внизу
                 with st.expander("🔬 Розширені дані та детальний структурний аналіз (для матеріалів справи)", expanded=False):
                     st.markdown(f"""
                     #### 📋 Деталізація структурних ознак за Постановою КМУ № 1213:
