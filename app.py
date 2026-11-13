@@ -114,13 +114,12 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
-    # Если введен InChIKey, а SMILES пустой — пробуем конвертировать автоматически
     if not target_smiles and inchi_input.strip():
         with st.spinner("Пошук структури за InChIKey через PubChem..."):
             resolved_smiles = get_smiles_from_inchikey(inchi_input.strip())
             if resolved_smiles:
                 target_smiles = resolved_smiles
-                st.success(поспiх: знайдено SMILES -> `{target_smiles}`")
+                st.success(f"Успіх: знайдено SMILES -> {target_smiles}")
             else:
                 st.error("Не вдалося знайти сполуку в базі за введеним InChIKey.")
 
