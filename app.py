@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Офлайн-словник для миттєвої конвертації найпопулярніших InChIKey без інтернету
+# Офлайн-словник для міттєвої конвертації найпопулярніших InChIKey без інтернету
 OFFLINE_INCHI_MAP = {
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамин
@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchikey_key):
         pass
     return None
 
-# Повний аналіз із перевіркою і сирого, і канонічного об'єктів
+# Повний аналіз із захищеною ініціалізацією всіх патернів
 def analyze_molecule(smiles):
     raw_mol = Chem.MolFromSmiles(smiles)
     if not raw_mol:
@@ -66,28 +66,31 @@ def analyze_molecule(smiles):
     if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-   # 2. Похідні бензилімідазолу (нітазени) — гарантоване розпізнавання
-    # Перевіряємо бензилімідазольний каркас та наявність нітрогрупи в будь-якому стані
+    # 2. Похідні бензилімідазолу (нітазени) — надійний якірний метод
+    nitro_group = Chem.MolFromSmarts("[N+](=O)[O-]")
+    benzimidazole_core = Chem.MolFromSmarts("n1cnc2ccccc12")
+    propanamide_group = Chem.MolFromSmarts("CCC(=O)N")
+    
     nitazene_smarts = [
-        Chem.MolFromSmarts("n1c(*)nc2ccccc12"), # загальний імідазол
-        Chem.MolFromSmarts("c2ccc([N+](=O)[O-])cc2"), # нітрогрупа в бензольному кільці
-        Chem.MolFromSmarts("N(CCN(CC)CC)c1nc(...)"), # амінний ланцюг нітазенів
-        Chem.MolFromSmarts("O=C(CC)N(CCN)"),
+        Chem.MolFromSmarts("n1c(*)nc2ccc([N+](=O)[O-])cc12"),
+        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1"),
+        Chem.MolFromSmarts("c1nc(Cc2ccccc2)c3cc([N+](=O)[O-])ccc13"),
+        Chem.MolFromSmarts("c1nc2cc([N+](=O)[O-])ccc2nc1")
     ]
     
-    # Жорсткий якір для нітазенів: бензилімідазольне ядро + нітрогрупа + амінний ланцюг з пропаноїловим залишком
-    has_benzimidazole = raw_mol.HasSubstructMatch(Chem.MolFromSmarts("n1cnc2ccccc12")) or mol.HasSubstructMatch(Chem.MolFromSmarts("n1cnc2ccccc12"))
-    has_nitro = raw_mol.HasSubstructMatch(nitro_group) or mol.HasSubstructMatch(nitro_group)
-    has_propanamide = raw_mol.HasSubstructMatch(Chem.MolFromSmarts("CCC(=O)N")) or mol.HasSubstructMatch(Chem.MolFromSmarts("CCC(=O)N"))
+    has_benzimidazole = (benzimidazole_core and (mol.HasSubstructMatch(benzimidazole_core) or raw_mol.HasSubstructMatch(benzimidazole_core))) or \
+                        (Chem.MolFromSmarts("n1c(*)nc2ccccc12") and (mol.HasSubstructMatch(Chem.MolFromSmarts("n1c(*)nc2ccccc12")) or raw_mol.HasSubstructMatch(Chem.MolFromSmarts("n1c(*)nc2ccccc12"))))
+    
+    has_nitro = nitro_group and (mol.HasSubstructMatch(nitro_group) or raw_mol.HasSubstructMatch(nitro_group))
+    has_propanamide = propanamide_group and (mol.HasSubstructMatch(propanamide_group) or raw_mol.HasSubstructMatch(propanamide_group))
     
     is_nitazene = (
         any((s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s))) for s in nitazene_smarts) or 
         (has_benzimidazole and has_nitro and has_propanamide)
     )
-    
     if is_nitazene:
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
-        
+
     # 3. Група катинонів
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
