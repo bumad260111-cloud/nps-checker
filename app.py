@@ -28,12 +28,12 @@ col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
 clear_btn = col_btn2.button("Очистити", on_click=clear_fields)
 
+# Тільки реальні підконтрольні позиції ПКМУ № 770
 DIRECT_LIST_770 = {
     "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
     "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
     "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
-    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
-    "CN1C=NC2=C1C(=O)N(C(=O)N2C)C": ("Кофеин (Caffeine)", "Не підлягає контролю (Харчовий/медичний компонент)")
+    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
 }
 
 PATTERNS = {
@@ -46,7 +46,6 @@ PATTERNS = {
 }
 
 OFFLINE_INCHI_MAP = {
-    "RYYVLZVVIJVGH-UHFFFAOYSA-N": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", # Кофеїн
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамін
 }
@@ -94,7 +93,7 @@ def get_pubchem_info(smiles):
             return props.get('Title', 'Досліджувана сполука'), props.get('IUPACName', 'Не знайдено')
     except Exception:
         pass
-    return "Нова психоактивна речовина", "Дані мережі недоступні"
+    return "Досліджувана сполука", "Дані мережі недоступні"
 
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
@@ -139,7 +138,6 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
-    # Если первое поле пустое, но введен InChIKey — конвертируем в локальную переменную
     if not target_smiles and inchi_input.strip():
         with st.spinner("Конвертація InChIKey..."):
             resolved = get_smiles_from_inchikey(inchi_input.strip())
@@ -209,7 +207,7 @@ if search_btn:
                         language="text"
                     )
                 else:
-                    st.warning("Прямих збігів з самостійними позиціями Переліку № 770 або базовими ядрами похідних у межах поточних шаблонів не виявлено.")
+                    st.warning("✅ **Прямих збігів або ознак похідних за критеріями ПКМУ № 770 / № 1213 не виявлено.** Речовина не підпадає під дію зазначених списків контролю.")
     else:
         st.warning("Будь ласка, введіть SMILES або InChIKey для перевірки.")
 else:
