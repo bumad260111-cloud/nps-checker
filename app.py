@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Офлайн-словник для міттєвої конвертації найпопулярніших InChIKey без інтернету
+# Офлайн-словник для миттєвої конвертації найпопулярніших InChIKey без інтернету
 OFFLINE_INCHI_MAP = {
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамин
@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний аналіз з розширеним набором груп
+# Повний аналіз з оновленими SMARTS-шаблонами та суворим пріоритетом
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -52,7 +52,7 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин)
+    # 1. Група фентанілу (4-анілінопіперидин та гетероциклічні аналоги) — найвищий пріоритет
     fentanyl_smarts = [
         Chem.MolFromSmarts("O=C(CC)N(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), 
         Chem.MolFromSmarts("N(C(=O))(c1ccccc1)C2CCN(CC2)"),                  
@@ -69,15 +69,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
-    # 3. Похідні бензимідазолону / піперидиніл-бензимідазолону (як на вашому скріншоті)
-    benzimidazolone_smarts = [
-        Chem.MolFromSmarts("O=C1Nc2ccccc2N1C3CCN(CC3)"),
-        Chem.MolFromSmarts("N1C(=O)Nc2ccccc12")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in benzimidazolone_smarts):
-        groups_found.append("Похідні бензимідазолону та їх структурні аналоги (психотропні / нейролептичні сполуки)")
-
-    # 4. Група катинонів ($\beta$-кето-фенетиламіни)
+    # 3. Група катинонів ($\beta$-кето-фенетиламіни)
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
         Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
@@ -86,7 +78,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
         groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
-    # 5. Синтетичні канабіноїди
+    # 4. Синтетичні канабіноїди
     cannabinoid_smarts = [
         Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
         Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
@@ -94,7 +86,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
 
-    # 6. Група триптамінів / індольних сполук
+    # 5. Група триптамінів / індольних сполук
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
@@ -103,7 +95,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
-    # 7. Похідні бензодіазепінів
+    # 6. Похідні бензодіазепінів
     benzodiazepine_smarts = [
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2)c3ccccc3)N"),
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
@@ -112,14 +104,14 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in benzodiazepine_smarts):
         groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
 
-    # 8. Похідні піперазину
+    # 7. Похідні піперазину
     piperazine_smarts = [
         Chem.MolFromSmarts("C1CNCCN1")
     ]
     if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
         groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
 
-    # 9. Група загальних фенетиламінів
+    # 8. Група загальних фенетиламінів (спрацьовує лише якщо не знайдено вищих класів)
     if not groups_found:
         phenethyl_smarts = [
             Chem.MolFromSmarts("c1ccccc1CC(C)N"),
@@ -129,7 +121,7 @@ def analyze_molecule(smiles):
         if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
             groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 10. Група PCP
+    # 9. Група PCP
     if not groups_found:
         pcp_smarts = [
             Chem.MolFromSmarts("C1CCCCC1N")
@@ -218,7 +210,23 @@ if target_smiles:
             
             st.markdown("### 📊 Фізико-хімічні дескриптори")
             st.metric("Молекулярна маса (MW)", f"{res['mw']} а.о.м.")
-            st.metric("Коефіцієнт розподілу (LogP)", f"{res['logp']}")
+            
+            # Логіка розширеної підказки по розчинності залежно від LogP
+            logp_val = res['logp']
+            if logp_val > 3.0:
+                solubility_hint = (
+                    "У воді погано розчинна (гідрофобна). "
+                    "Добре розчинна в полярних органічних (метанол, ацетонітрил, етанол, ацетон) "
+                    "та неполярних/малополярних розчинниках (хлороформ, дихлорметан, етилацетат, гексан, толуол)."
+                )
+            elif logp_val < 0:
+                solubility_hint = "Добре розчинна у воді та полярних середовищах."
+            else:
+                solubility_hint = "Помірно розчинна як у полярних, так і в малополярних середовищах."
+
+            st.metric("Коефіцієнт розподілу (LogP)", f"{logp_val}")
+            st.caption(f"**Характеристика розчинності:** {solubility_hint}")
+
             st.metric("Полярна поверхня (TPSA)", f"{res['tpsa']} Å²")
             st.write(f"**Важких атомів:** {res['heavy_atoms']}")
             st.write(f"**Донори / Акцептори Н-зв'язків:** {res['h_donors']} / {res['h_acceptors']}")
