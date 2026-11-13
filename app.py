@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Логіка аналізу для всіх груп (з урахуванням пріоритету катинонів)
+# Повний розширений аналіз для ВСІХ груп підконтрольних речовин
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -52,7 +52,7 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин)
+    # 1. Група фентанілу (4-анілінопіперидин) — найвищий пріоритет
     fentanyl_smarts = [
         Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3"),
         Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3"),
@@ -61,7 +61,15 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Група катинонів (бета-кето-фенетиламіни, альфа-PVP) — вищий пріоритет
+    # 2. Похідні бензилімідазолу (нітазени)
+    nitazene_smarts = [
+        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"),
+        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
+        groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
+
+    # 3. Група катинонів (бета-кето-фенетиламіни, альфа-PVP)
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
         Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
@@ -70,7 +78,15 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
         groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
-    # 3. Група триптамінів / індольних сполук
+    # 4. Синтетичні канабіноїди
+    cannabinoid_smarts = [
+        Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
+        Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
+        groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
+
+    # 5. Група триптамінів / індольних сполук
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
@@ -79,7 +95,23 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
-    # 4. Група фенетиламінів / амфетамінів / бензиламінів
+    # 6. Похідні бензодіазепінів
+    benzodiazepine_smarts = [
+        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2)c3ccccc3)N"),
+        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
+        Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(N2)=O)")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in benzodiazepine_smarts):
+        groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
+
+    # 7. Похідні піперазину
+    piperazine_smarts = [
+        Chem.MolFromSmarts("C1CNCCN1")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
+        groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
+
+    # 8. Група фенетиламінів / амфетамінів / заміщених бензиламінів
     phenethyl_smarts = [
         Chem.MolFromSmarts("c1ccccc1CC(C)N"),
         Chem.MolFromSmarts("c1ccccc1CCN"),
@@ -88,28 +120,12 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
         groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 5. Група фенциклідину (PCP / циклогексиламіни)
+    # 9. Група фенциклідину (PCP / арилоксициклогексиламіни)
     pcp_smarts = [
         Chem.MolFromSmarts("C1CCCCC1N")
     ]
     if any(s and mol.HasSubstructMatch(s) for s in pcp_smarts) and heavy_atoms > 10:
         groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
-
-    # 6. Синтетичні канабіноїди
-    cannabinoid_smarts = [
-        Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
-        Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
-        groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
-
-    # 7. Похідні бензилімідазолу (нітазени)
-    nitazene_smarts = [
-        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"),
-        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
-        groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
     if not groups_found:
         groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
@@ -188,7 +204,7 @@ if target_smiles:
 
         with col_info:
             st.subheader("Результати аналізу та ідентифікація")
-            st.info("ℹ️ Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213")
+            st.info("ℹ️ Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213 для всіх груп НПР")
             
             st.write(f"**Найменування / Синонім:** {res['common_name']}")
             st.write(f"**Систематична назва (IUPAC):** Дані мережі недоступні")
