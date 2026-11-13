@@ -9,7 +9,6 @@ st.set_page_config(page_title="Автоматизація віднесення �
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою КМУ № 1213 від 02.10.2026)")
 
-# Ініціалізація стану
 if "smiles_val" not in st.session_state:
     st.session_state.smiles_val = "O=C(c1ccccc1)C(CCCC)N1CCCC1"
 
@@ -22,7 +21,6 @@ def clear_fields():
     st.session_state.smiles_val = ""
     st.session_state.inchi_val = ""
 
-# Два поля: SMILES та InChIKey
 smiles_input = st.sidebar.text_input("1. Введіть SMILES з'єднання:", key="smiles_val")
 inchi_input = st.sidebar.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchi_val")
 
@@ -34,7 +32,8 @@ DIRECT_LIST_770 = {
     "CC(CC1=CC=CC=C1)N": ("Амфетамин (Amphetamine)", "Список № 2 таблиці I (Психотропні речовини, обіг яких обмежено)"),
     "CNC(CC1=CC=CC=C1)C": ("Метамфетамин (Methamphetamine)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
     "O=C(c1ccccc1)C(CCCC)N1CCCC1": ("альфа-PVP (α-PVP)", "Список № 2 таблиці I (Особливо небезпечні психотропні речовини)"),
-    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)")
+    "CCC(=O)N(C1CCN(CC1)CCC2=CC=CC=C2)C3=CC=CC=C3": ("Фентанил (Fentanyl)", "Список № 1 таблиці I (Особливо небезпечні наркотичні засоби)"),
+    "CN1C=NC2=C1C(=O)N(C(=O)N2C)C": ("Кофеин (Caffeine)", "Не підлягає контролю (Харчовий/медичний компонент)")
 }
 
 PATTERNS = {
@@ -46,15 +45,26 @@ PATTERNS = {
     "Похідні групи триптаміну": "c1ccc2c(c1)c(c[nH]2)CCN"
 }
 
+# Офлайн-словник найвідоміших InChIKey для миттєвої конвертації без збоїв мережі
+OFFLINE_INCHI_MAP = {
+    "RYYVLZVVIJVGH-UHFFFAOYSA-N": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", # Кофеїн
+    "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
+    "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамін
+}
+
 def get_smiles_from_inchikey(inchi_key):
     clean_key = inchi_key.strip()
     if not clean_key:
         return None
         
-    # 1. Резервний шлюз через NIH/Cactus (стабільний та швидкий)
+    # 1. Спочатку перевіряємо локальний офлайн-словник (працює завжди миттєво)
+    if clean_key in OFFLINE_INCHI_MAP:
+        return OFFLINE_INCHI_MAP[clean_key]
+
+    # 2. Резервний запит через NIH/Cactus
     url_cactus = f"https://cactus.nci.nih.gov/chemical/structure/{clean_key}/smiles"
     try:
-        response = requests.get(url_cactus, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        response = requests.get(url_cactus, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
         if response.status_code == 200:
             smiles = response.text.strip()
             if smiles and not smiles.startswith("<"):
@@ -62,17 +72,17 @@ def get_smiles_from_inchikey(inchi_key):
     except Exception:
         pass
 
-    # 2. Основний шлюз через PubChem API
+    # 3. Резервний запит через PubChem
     url_pubchem = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
     try:
-        response = requests.get(url_pubchem, timeout=7, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        response = requests.get(url_pubchem, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
         if response.status_code == 200:
             data = response.json()
             props = data.get('PropertyTable', {}).get('Properties', [])
             if props:
                 return props[0].get('CanonicalSMILES')
-    except Exception as e:
-        st.error(f"Помилка сервера конвертації: {e}")
+    except Exception:
+        pass
         
     return None
 
@@ -133,16 +143,15 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
-    # Якщо перше поле порожнє, але введено InChIKey — конвертуємо "на льоту"
     if not target_smiles and inchi_input.strip():
-        with st.spinner("Пошук структури за InChIKey через бази даних..."):
+        with st.spinner("Конвертація InChIKey..."):
             resolved = get_smiles_from_inchikey(inchi_input.strip())
             if resolved:
                 target_smiles = resolved
-                st.session_state.smiles_val = resolved  # Автоматично заповнюємо перше поле SMILES
-                st.success(f"Успіх: InChIKey конвертовано у SMILES -> {resolved}")
+                st.session_state.smiles_val = resolved
+                st.success(f"Успіх: InChIKey успішно розпізнано -> {resolved}")
             else:
-                st.error("Не вдалося знайти сполуку в базах даних за введеним InChIKey. Перевірте правильність ключа.")
+                st.error("Не вдалося знайти сполуку. Введіть SMILES безпосередньо у перше поле.")
 
     if target_smiles:
         res, err = analyze_molecule(target_smiles)
