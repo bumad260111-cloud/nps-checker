@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Офлайн-словник для міттєвої конвертації найпопулярніших InChIKey без інтернету
+# Офлайн-словник для миттєвої конвертації найпопулярніших InChIKey без інтернету
 OFFLINE_INCHI_MAP = {
     "POWBRKUNTHXSNV-UHFFFAOYSA-N": "O=C(c1ccccc1)C(CCCC)N1CCCC1",  # альфа-PVP
     "CKJOSOOJKKYIIK-UHFFFAOYSA-N": "CC(CC1=CC=CC=C1)N",           # Амфетамин
@@ -36,9 +36,15 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний аналіз з оновленими SMARTS-шаблонами та суворим пріоритетом
+# Повний аналіз з канонізацією та надійними якірними SMARTS-шаблонами
 def analyze_molecule(smiles):
-    mol = Chem.MolFromSmiles(smiles)
+    # Нормалізація та канонізація SMILES через RDKit
+    raw_mol = Chem.MolFromSmiles(smiles)
+    if not raw_mol:
+        return None
+    
+    canonical_smiles = Chem.MolToSmiles(raw_mol)
+    mol = Chem.MolFromSmiles(canonical_smiles)
     if not mol:
         return None
         
@@ -52,7 +58,7 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин та гетероциклічні аналоги)
+    # 1. Група фентанілу (4-анілінопіперидин та гетероциклічні аналоги) — найвищий пріоритет
     fentanyl_smarts = [
         Chem.MolFromSmarts("O=C(CC)N(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), 
         Chem.MolFromSmarts("N(C(=O))(c1ccccc1)C2CCN(CC2)"),                  
@@ -61,12 +67,19 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени)
+    # 2. Похідні бензилімідазолу (нітазени) — якірний метод + специфічні шаблони
+    benzimidazole_core = Chem.MolFromSmarts("n1c(*)nc2ccccc12")
+    nitro_group = Chem.MolFromSmarts("[N+](=O)[O-]")
     nitazene_smarts = [
-        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"),
-        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")
+        Chem.MolFromSmarts("n1c(*)nc2ccc([N+](=O)[O-])cc12"),
+        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1"),
+        Chem.MolFromSmarts("c1nc(Cc2ccccc2)c3cc([N+](=O)[O-])ccc13")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
+    is_nitazene = (
+        any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts) or 
+        (mol.HasSubstructMatch(benzimidazole_core) and mol.HasSubstructMatch(nitro_group))
+    )
+    if is_nitazene:
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
     # 3. Група катинонів ($\beta$-кето-фенетиламіни)
@@ -134,6 +147,7 @@ def analyze_molecule(smiles):
 
     return {
         "mol": mol,
+        "canonical_smiles": canonical_smiles,
         "mw": mw,
         "logp": logp,
         "tpsa": tpsa,
@@ -237,7 +251,7 @@ if target_smiles:
             st.info("ℹ️ Автоматичний скринінг за критеріями ПКМУ № 770 / № 1213 для всіх груп НПР")
             
             st.write(f"**Найменування / Синонім:** {res['common_name']}")
-            st.write(f"**Систематична назва (IUPAC):** Дані мережі недоступні")
+            st.write(f"**Канонічний SMILES:** `{res['canonical_smiles']}`")
             
             st.markdown("---")
             
@@ -271,9 +285,9 @@ if target_smiles:
                     ---
 
                     #### 📊 Розбір структури по фрагментах
-                    * **Базове ядро / кільцева система:** Ідентифіковано основний фармакофорний каркас (ароматична або гетероциклічна система), що визначає приналежність до класу **{detected_group}**. Замісники та функціональні групи локалізовані у відповідних положеннях циклу.
-                    * **Аліфатичний / алкільний ланцюг:** Наявні лінійні або розгалужені вуглеводневі радикали (алкільні/ацильні ланцюги), приєднані до активних центрів молекули (атомів азоту, вуглецю чи кисню ядра).
-                    * **Функціональні групи та замісники:** Зафіксовано наявність карбонільних, амінних або інших груп, що забезпечують специфічну реакційну здатність та ліпофільність ($LogP = {res['logp']}$).
+                    * **Базове ядро / кільцева система:** Ідентифіковано основний фармакофорний каркас, що визначає приналежність до класу **{detected_group}**. Замісники та функціональні групи локалізовані у відповідних положеннях циклу.
+                    * **Аліфатичний / алкільний ланцюг:** Наявні лінійні або розгалужені вуглеводневі радикали, приєднані до активних центрів молекули.
+                    * **Функціональні групи та замісники:** Зафіксовано наявність функціональних груп, що забезпечують специфічну реакційну здатність та ліпофільність ($LogP = {res['logp']}$).
 
                     ---
 
@@ -286,7 +300,6 @@ if target_smiles:
 
                     #### 2. Центральна структура (Базове ядро)
                     * **Базова система:** Центральне ароматичне або гетероциклічне ядро, що утворює фармакофорний каркас молекули.
-                    * **Характеристики циклічного скелета:** Конденсована або моноциклічна система з розгалуженою $\pi$-електронною системою.
 
                     #### 3. Циклічні системи та їх параметри
                     | Параметр | Опис / Значення |
