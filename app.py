@@ -51,20 +51,20 @@ def analyze_molecule(smiles):
     h_donors = Descriptors.NumHDonors(mol)
     h_acceptors = Descriptors.NumHAcceptors(mol)
     
-    # SMARTS-патерни для перевірки груп (приклад базових систем)
+    # SMARTS-патерни для перевірки груп
     groups_found = []
     
-    # Приклад патерну для похідних групи фентанілу (4-анілінопіперидин)
-    fentanyl_smarts = Chem.MolFromSmarts("c1ccccc1CN1CCC(CC1)NC2=CC=CC=C2")
+    # Виправлений та точний SMARTS-шаблон для похідних групи фентанілу (4-анілінопіперидин)
+    fentanyl_smarts = Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3")
     if fentanyl_smarts and mol.HasSubstructMatch(fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # Приклад загального патерну заміщених амфетамінів / фенетиламінів
+    # SMARTS-патерн для заміщених фенетиламінів / амфетамінів
     phenethyl_smarts = Chem.MolFromSmarts("c1ccccc1CC(C)N")
     if phenethyl_smarts and mol.HasSubstructMatch(phenethyl_smarts):
         groups_found.append("Похідні фенетиламінів / амфетамінів")
 
-    # Якщо специфічний паттерн не спрацював, але структура валідна для загальної перевірки похідних
+    # Якщо специфічні патерни не спрацювали
     if not groups_found:
         groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин")
 
