@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Розширена логіка аналізу для всіх основних груп
+# Розширена логіка аналізу для всіх груп, включаючи нітазени
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -102,6 +102,14 @@ def analyze_molecule(smiles):
     ]
     if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
+
+    # 7. Похідні бензилімідазолу (нітазени)
+    nitazene_smarts = [
+        Chem.MolFromSmarts("n1c(CN)nc2ccc([N+](=O)[O-])cc12"),
+        Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
+        groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
     if not groups_found:
         groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
@@ -199,7 +207,7 @@ if target_smiles:
                     language="text"
                 )
                 
-                # 2. Розширені дані з використанням офіційної термінології (Центральна структура, місток тощо)
+                # 2. Розширені дані з використанням офіційної термінології
                 with st.expander("🔬 Розширені дані та детальний структурний аналіз (для матеріалів справи)", expanded=False):
                     st.markdown(f"""
                     #### 📋 Структурний аналіз за методикою (Постанова КМУ № 1213):
