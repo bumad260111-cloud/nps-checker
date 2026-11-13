@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний аналіз з найвищим пріоритетом для специфічних груп (фентаніли, нітазени, катинони)
+# Повний аналіз з жорстким контролем пріоритетів
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -52,16 +52,16 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин) — НАЙВИЩИЙ ПРІОРИТЕТ
+    # 1. Фентаніли (4-анілінопіперидин та пов'язані з ним аналоги)
     fentanyl_smarts = [
-        Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3"),
-        Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3"),
-        Chem.MolFromSmarts("N1CCC(CC1)N(C(=O))c2ccccc2")
+        Chem.MolFromSmarts("N(C(=O)CC)(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), # класичний фентаніл
+        Chem.MolFromSmarts("N(C(=O))(c1ccccc1)C2CCN(CC2)"),                  # базовий анілінопіперидин з амідом
+        Chem.MolFromSmarts("c1ccccc1N(C(=O))C2CCN(CC2)")
     ]
     if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени) — ВИСОКИЙ ПРІОРИТЕТ
+    # 2. Нітазени (бензилімідазоли)
     nitazene_smarts = [
         Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"),
         Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")
@@ -69,7 +69,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
-    # 3. Група катинонів (бета-кето-фенетиламіни, альфа-PVP)
+    # 3. Катинони ($\beta$-кето-фенетиламіни)
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
         Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
@@ -86,7 +86,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
 
-    # 5. Група триптамінів / індольних сполук
+    # 5. Триптаміни / індольні сполуки
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
@@ -95,7 +95,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
-    # 6. Похідні бензодіазепінів
+    # 6. Бензодіазепіни
     benzodiazepine_smarts = [
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2)c3ccccc3)N"),
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
@@ -104,28 +104,30 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in benzodiazepine_smarts):
         groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
 
-    # 7. Похідні піперазину
+    # 7. Піперазини
     piperazine_smarts = [
         Chem.MolFromSmarts("C1CNCCN1")
     ]
     if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
         groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
 
-    # 8. Група загальних фенетиламінів / амфетамінів / бензиламінів (нижчий пріоритет)
-    phenethyl_smarts = [
-        Chem.MolFromSmarts("c1ccccc1CC(C)N"),
-        Chem.MolFromSmarts("c1ccccc1CCN"),
-        Chem.MolFromSmarts("c1cc(OC)c(CN)cc1")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
-        groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
+    # 8. Фенетиламіни / амфетаміни (перевіряємо ТІЛЬКИ якщо ще не знайдені специфічніші класи на кшталт фентанілів)
+    if not groups_found:
+        phenethyl_smarts = [
+            Chem.MolFromSmarts("c1ccccc1CC(C)N"),
+            Chem.MolFromSmarts("c1ccccc1CCN"),
+            Chem.MolFromSmarts("c1cc(OC)c(CN)cc1")
+        ]
+        if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
+            groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 9. Група фенциклідину (PCP)
-    pcp_smarts = [
-        Chem.MolFromSmarts("C1CCCCC1N")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in pcp_smarts) and heavy_atoms > 10:
-        groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
+    # 9. PCP (фенциклідин)
+    if not groups_found:
+        pcp_smarts = [
+            Chem.MolFromSmarts("C1CCCCC1N")
+        ]
+        if any(s and mol.HasSubstructMatch(s) for s in pcp_smarts) and heavy_atoms > 10:
+            groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
 
     if not groups_found:
         groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
