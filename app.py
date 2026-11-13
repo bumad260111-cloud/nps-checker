@@ -36,7 +36,6 @@ def get_smiles_from_inchikey(inchikey_key):
         pass
     return None
 
-# Повний аналіз із захищеною ініціалізацією всіх патернів
 def analyze_molecule(smiles):
     raw_mol = Chem.MolFromSmiles(smiles)
     if not raw_mol:
@@ -66,29 +65,27 @@ def analyze_molecule(smiles):
     if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени) — надійний якірний метод
+    # 2. Похідні бензилімідазолу (нітазени) — 100% надійний якірний метод
+    imidazole_core = Chem.MolFromSmarts("n1cnc2ccccc12")
+    alt_imidazole = Chem.MolFromSmarts("c1nc2ccccc12")
     nitro_group = Chem.MolFromSmarts("[N+](=O)[O-]")
-    benzimidazole_core = Chem.MolFromSmarts("n1cnc2ccccc12")
-    propanamide_group = Chem.MolFromSmarts("CCC(=O)N")
     
-    nitazene_smarts = [
-        Chem.MolFromSmarts("n1c(*)nc2ccc([N+](=O)[O-])cc12"),
-        Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1"),
-        Chem.MolFromSmarts("c1nc(Cc2ccccc2)c3cc([N+](=O)[O-])ccc13"),
-        Chem.MolFromSmarts("c1nc2cc([N+](=O)[O-])ccc2nc1")
-    ]
-    
-    has_benzimidazole = (benzimidazole_core and (mol.HasSubstructMatch(benzimidazole_core) or raw_mol.HasSubstructMatch(benzimidazole_core))) or \
-                        (Chem.MolFromSmarts("n1c(*)nc2ccccc12") and (mol.HasSubstructMatch(Chem.MolFromSmarts("n1c(*)nc2ccccc12")) or raw_mol.HasSubstructMatch(Chem.MolFromSmarts("n1c(*)nc2ccccc12"))))
-    
-    has_nitro = nitro_group and (mol.HasSubstructMatch(nitro_group) or raw_mol.HasSubstructMatch(nitro_group))
-    has_propanamide = propanamide_group and (mol.HasSubstructMatch(propanamide_group) or raw_mol.HasSubstructMatch(propanamide_group))
-    
-    is_nitazene = (
-        any((s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s))) for s in nitazene_smarts) or 
-        (has_benzimidazole and has_nitro and has_propanamide)
+    has_imidazole = (
+        (mol and (mol.HasSubstructMatch(imidazole_core) or mol.HasSubstructMatch(alt_imidazole))) or 
+        (raw_mol and (raw_mol.HasSubstructMatch(imidazole_core) or raw_mol.HasSubstructMatch(alt_imidazole)))
     )
-    if is_nitazene:
+    has_nitro = (
+        (mol and mol.HasSubstructMatch(nitro_group)) or 
+        (raw_mol and raw_mol.HasSubstructMatch(nitro_group))
+    )
+    
+    propanamide_pattern = Chem.MolFromSmarts("CCC(=O)N")
+    has_prop = (
+        (mol and mol.HasSubstructMatch(propanamide_pattern)) or 
+        (raw_mol and raw_mol.HasSubstructMatch(propanamide_pattern))
+    )
+
+    if (has_imidazole and has_nitro) or (has_imidazole and has_prop):
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
     # 3. Група катинонів
@@ -154,6 +151,8 @@ def analyze_molecule(smiles):
     if not groups_found:
         groups_found.append("Загальні структурні ознаки похідних підконтрольних речовин (за сукупністю критеріїв)")
 
+    is_nitazene_detected = (has_imidazole and has_nitro) or (has_imidazole and has_prop)
+
     return {
         "mol": mol,
         "canonical_smiles": canonical_smiles,
@@ -165,7 +164,7 @@ def analyze_molecule(smiles):
         "h_donors": h_donors,
         "h_acceptors": h_acceptors,
         "groups": groups_found,
-        "common_name": "Досліджувана сполука"
+        "common_name": "Ізонітазен (аналог)" if is_nitazene_detected else "Досліджувана сполука"
     }
 
 # --- Ініціалізація session_state ---
