@@ -2,8 +2,6 @@ import streamlit as st
 import requests
 from rdkit import Chem
 from rdkit.Chem import Descriptors
-from rdkit.Chem.Lipiphilic import MolLogP
-from rdkit.Chem.MolSurf import TPSA
 from rdkit.Chem.Draw import MolToImage
 
 st.set_page_config(page_title="Автоматизація віднесення до похідних — ПКМУ № 1213", layout="wide")
