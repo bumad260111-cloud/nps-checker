@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний аналіз з оновленими SMARTS-шаблонами та суворим пріоритетом
+# Повний аналіз з розширеним набором груп
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -52,7 +52,7 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин та гетероциклічні аналоги) — найвищий пріоритет
+    # 1. Група фентанілу (4-анілінопіперидин)
     fentanyl_smarts = [
         Chem.MolFromSmarts("O=C(CC)N(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), 
         Chem.MolFromSmarts("N(C(=O))(c1ccccc1)C2CCN(CC2)"),                  
@@ -69,7 +69,15 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts):
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
-    # 3. Група катинонів ($\beta$-кето-фенетиламіни)
+    # 3. Похідні бензимідазолону / піперидиніл-бензимідазолону (як на вашому скріншоті)
+    benzimidazolone_smarts = [
+        Chem.MolFromSmarts("O=C1Nc2ccccc2N1C3CCN(CC3)"),
+        Chem.MolFromSmarts("N1C(=O)Nc2ccccc12")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in benzimidazolone_smarts):
+        groups_found.append("Похідні бензимідазолону та їх структурні аналоги (психотропні / нейролептичні сполуки)")
+
+    # 4. Група катинонів ($\beta$-кето-фенетиламіни)
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
         Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
@@ -78,7 +86,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
         groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
-    # 4. Синтетичні канабіноїди
+    # 5. Синтетичні канабіноїди
     cannabinoid_smarts = [
         Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
         Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
@@ -86,7 +94,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
 
-    # 5. Група триптамінів / індольних сполук
+    # 6. Група триптамінів / індольних сполук
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
@@ -95,7 +103,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
-    # 6. Похідні бензодіазепінів
+    # 7. Похідні бензодіазепінів
     benzodiazepine_smarts = [
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2)c3ccccc3)N"),
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
@@ -104,14 +112,14 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in benzodiazepine_smarts):
         groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
 
-    # 7. Похідні піперазину
+    # 8. Похідні піперазину
     piperazine_smarts = [
         Chem.MolFromSmarts("C1CNCCN1")
     ]
     if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
         groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
 
-    # 8. Група загальних фенетиламінів
+    # 9. Група загальних фенетиламінів
     if not groups_found:
         phenethyl_smarts = [
             Chem.MolFromSmarts("c1ccccc1CC(C)N"),
@@ -121,7 +129,7 @@ def analyze_molecule(smiles):
         if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
             groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 9. Група PCP
+    # 10. Група PCP
     if not groups_found:
         pcp_smarts = [
             Chem.MolFromSmarts("C1CCCCC1N")
@@ -161,13 +169,13 @@ with st.sidebar:
     
     smiles_input = st.text_area("1. Введіть SMILES з'єднання:", key="smiles_val", placeholder="Наприклад: CCC(=O)N(...)")
     
-    # ПЕРЕВІРКА ВАЛІДНОСТІ SMILES НА ЛЬОТУ
+    # Перевірка валідності SMILES на льоту
     if smiles_input.strip():
         test_mol = Chem.MolFromSmiles(smiles_input.strip())
         if test_mol is None:
             st.error("⚠️ Увага: Некоректний формат SMILES! Перевірте синтаксис.")
         else:
-            st.success("✅ Сінтаксис SMILES валідний")
+            st.success("✅ Синтаксис SMILES валідний")
 
     inchikey_input = st.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchikey_val", placeholder="FDEYROXLYFBBPU-...")
     
@@ -186,7 +194,6 @@ target_smiles = ""
 
 if check_btn:
     if smiles_input.strip():
-        # Додаткова перевірка перед запуском розрахунків
         if Chem.MolFromSmiles(smiles_input.strip()) is None:
             st.error("Помилка: Неможливо обробити введений SMILES-рядок. Перевірте правильність написання.")
         else:
