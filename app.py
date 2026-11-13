@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний розширений аналіз для ВСІХ груп підконтрольних речовин
+# Повний аналіз з найвищим пріоритетом для специфічних груп (фентаніли, нітазени, катинони)
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -52,7 +52,7 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин) — найвищий пріоритет
+    # 1. Група фентанілу (4-анілінопіперидин) — НАЙВИЩИЙ ПРІОРИТЕТ
     fentanyl_smarts = [
         Chem.MolFromSmarts("c1ccccc1CCN2CCC(CC2)N(C(=O))c3ccccc3"),
         Chem.MolFromSmarts("c1ccccc1CN2CCC(CC2)N(C(=O))c3ccccc3"),
@@ -61,7 +61,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени)
+    # 2. Похідні бензилімідазолу (нітазени) — ВИСОКИЙ ПРІОРИТЕТ
     nitazene_smarts = [
         Chem.MolFromSmarts("n1c(CC2=CC=CC=C2)nc3ccc([N+](=O)[O-])cc13"),
         Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1")
@@ -111,7 +111,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
         groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
 
-    # 8. Група фенетиламінів / амфетамінів / заміщених бензиламінів
+    # 8. Група загальних фенетиламінів / амфетамінів / бензиламінів (нижчий пріоритет)
     phenethyl_smarts = [
         Chem.MolFromSmarts("c1ccccc1CC(C)N"),
         Chem.MolFromSmarts("c1ccccc1CCN"),
@@ -120,7 +120,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
         groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 9. Група фенциклідину (PCP / арилоксициклогексиламіни)
+    # 9. Група фенциклідину (PCP)
     pcp_smarts = [
         Chem.MolFromSmarts("C1CCCCC1N")
     ]
