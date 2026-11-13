@@ -17,8 +17,8 @@ OFFLINE_INCHI_MAP = {
     "ALQFAGPCPBPED-UHFFFAOYSA-N": "FCCCCCn1cc(C(=O)c2cccc3ccccc23)c4ccccc14", # AM-2201
 }
 
-def get_smiles_from_inchikey(inchi_key):
-    clean_key = inchi_key.strip()
+def get_smiles_from_inchikey(inchikey_key):
+    clean_key = inchikey_key.strip()
     if not clean_key:
         return None
     if clean_key in OFFLINE_INCHI_MAP:
@@ -36,9 +36,8 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Повний аналіз з канонізацією та надійними якірними SMARTS-шаблонами
+# Повний аналіз із перевіркою і сирого, і канонічного об'єктів
 def analyze_molecule(smiles):
-    # Нормалізація та канонізація SMILES через RDKit
     raw_mol = Chem.MolFromSmiles(smiles)
     if not raw_mol:
         return None
@@ -58,37 +57,39 @@ def analyze_molecule(smiles):
     
     groups_found = []
     
-    # 1. Група фентанілу (4-анілінопіперидин та гетероциклічні аналоги) — найвищий пріоритет
+    # 1. Група фентанілу
     fentanyl_smarts = [
         Chem.MolFromSmarts("O=C(CC)N(c1ccccc1)C2CCN(CC2)CCC3=CC=CC=C3"), 
         Chem.MolFromSmarts("N(C(=O))(c1ccccc1)C2CCN(CC2)"),                  
         Chem.MolFromSmarts("c1ccccc1N(C(=O))C2CCN(CC2)")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Похідні бензилімідазолу (нітазени) — якірний метод + специфічні шаблони
+    # 2. Похідні бензилімідазолу (нітазени) — розширена перевірка
     benzimidazole_core = Chem.MolFromSmarts("n1c(*)nc2ccccc12")
     nitro_group = Chem.MolFromSmarts("[N+](=O)[O-]")
     nitazene_smarts = [
         Chem.MolFromSmarts("n1c(*)nc2ccc([N+](=O)[O-])cc12"),
         Chem.MolFromSmarts("c1ccc(Cc2nc3ccc([N+](=O)[O-])cc3n2)cc1"),
-        Chem.MolFromSmarts("c1nc(Cc2ccccc2)c3cc([N+](=O)[O-])ccc13")
+        Chem.MolFromSmarts("c1nc(Cc2ccccc2)c3cc([N+](=O)[O-])ccc13"),
+        Chem.MolFromSmarts("c1nc2cc([N+](=O)[O-])ccc2nc1")
     ]
     is_nitazene = (
-        any(s and mol.HasSubstructMatch(s) for s in nitazene_smarts) or 
-        (mol.HasSubstructMatch(benzimidazole_core) and mol.HasSubstructMatch(nitro_group))
+        any((s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s))) for s in nitazene_smarts) or 
+        ((mol.HasSubstructMatch(benzimidazole_core) or raw_mol.HasSubstructMatch(benzimidazole_core)) and 
+         (mol.HasSubstructMatch(nitro_group) or raw_mol.HasSubstructMatch(nitro_group)))
     )
     if is_nitazene:
         groups_found.append("Похідні бензилімідазолу (синтетичні опіоїди / нітазени)")
 
-    # 3. Група катинонів ($\beta$-кето-фенетиламіни)
+    # 3. Група катинонів
     cathinone_smarts = [
         Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
         Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
         Chem.MolFromSmarts("C(=O)C(N)")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in cathinone_smarts):
         groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
     # 4. Синтетичні канабіноїди
@@ -96,16 +97,16 @@ def analyze_molecule(smiles):
         Chem.MolFromSmarts("n1cc(C(=O))c2ccccc12"),
         Chem.MolFromSmarts("n1nc(C(=O))c2ccccc12")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in cannabinoid_smarts):
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in cannabinoid_smarts):
         groups_found.append("Похідні синтетичних канабіноїдів (індольні/індазольні структури)")
 
-    # 5. Група триптамінів / індольних сполук
+    # 5. Група триптамінів
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
         Chem.MolFromSmarts("c1ccc2c(c1)c(CCN)c[nH]2")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
     # 6. Похідні бензодіазепінів
@@ -114,32 +115,32 @@ def analyze_molecule(smiles):
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(=N2))"),
         Chem.MolFromSmarts("c1ccc2c(c1)C(=NCC(N2)=O)")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in benzodiazepine_smarts):
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in benzodiazepine_smarts):
         groups_found.append("Похідні бензодіазепінів (психотропні речовини / транквілізатори)")
 
     # 7. Похідні піперазину
     piperazine_smarts = [
         Chem.MolFromSmarts("C1CNCCN1")
     ]
-    if any(s and mol.HasSubstructMatch(s) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
+    if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in piperazine_smarts) and heavy_atoms < 20 and not groups_found:
         groups_found.append("Похідні піперазину (арилпіперазини та синтетичні аналоги)")
 
-    # 8. Група загальних фенетиламінів
+    # 8. Загальні фенетиламіни
     if not groups_found:
         phenethyl_smarts = [
             Chem.MolFromSmarts("c1ccccc1CC(C)N"),
             Chem.MolFromSmarts("c1ccccc1CCN"),
             Chem.MolFromSmarts("c1cc(OC)c(CN)cc1")
         ]
-        if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
+        if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in phenethyl_smarts):
             groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
 
-    # 9. Група PCP
+    # 9. PCP
     if not groups_found:
         pcp_smarts = [
             Chem.MolFromSmarts("C1CCCCC1N")
         ]
-        if any(s and mol.HasSubstructMatch(s) for s in pcp_smarts) and heavy_atoms > 10:
+        if any(s and (mol.HasSubstructMatch(s) or raw_mol.HasSubstructMatch(s)) for s in pcp_smarts) and heavy_atoms > 10:
             groups_found.append("Похідні арилоксициклогексиламінів / фенциклідину (PCP)")
 
     if not groups_found:
@@ -159,14 +160,13 @@ def analyze_molecule(smiles):
         "common_name": "Досліджувана сполука"
     }
 
-# --- Ініціалізація session_state для полів вводу ---
+# --- Ініціалізація session_state ---
 if "smiles_val" not in st.session_state:
     st.session_state["smiles_val"] = ""
 if "inchikey_val" not in st.session_state:
     st.session_state["inchikey_val"] = ""
 
 # --- Інтерфейс Streamlit ---
-
 st.title("🔬 Автоматизація віднесення речовин до похідних")
 st.caption("Експертна служба МВС України (згідно з постановою Кабінету Міністрів України № 1213)")
 
@@ -175,7 +175,6 @@ with st.sidebar:
     
     smiles_input = st.text_area("1. Введіть SMILES з'єднання:", key="smiles_val", placeholder="Наприклад: CCC(=O)N(...)")
     
-    # Перевірка валідності SMILES на льоту
     if smiles_input.strip():
         test_mol = Chem.MolFromSmiles(smiles_input.strip())
         if test_mol is None:
@@ -225,7 +224,6 @@ if target_smiles:
             st.markdown("### 📊 Фізико-хімічні дескриптори")
             st.metric("Молекулярна маса (MW)", f"{res['mw']} а.о.м.")
             
-            # Логіка розширеної підказки по розчинності
             logp_val = res['logp']
             if logp_val > 3.0:
                 solubility_hint = (
@@ -261,7 +259,6 @@ if target_smiles:
                 
                 detected_group = res['groups'][0]
                 
-                # 1. Основне вікно: Проект висновку експерта
                 st.markdown("---")
                 st.subheader("📝 Проект висновку експерта:")
                 st.code(
@@ -276,7 +273,6 @@ if target_smiles:
                     language="text"
                 )
                 
-                # 2. Розширені дані у виваженому багатоступеневому форматі паспорта з розбором по фрагментах
                 with st.expander("🔬 Детальний структурний аналіз та паспорт сполуки (для матеріалів справи)", expanded=False):
                     st.markdown(f"""
                     ### Детальний структурний розбір молекули
