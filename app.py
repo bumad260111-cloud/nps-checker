@@ -15,14 +15,24 @@ if "smiles_val" not in st.session_state:
 if "inchi_val" not in st.session_state:
     st.session_state.inchi_val = ""
 
+if "resolved_smiles_val" not in st.session_state:
+    st.session_state.resolved_smiles_val = ""
+
 st.sidebar.header("Введення структури")
 
 def clear_fields():
     st.session_state.smiles_val = ""
     st.session_state.inchi_val = ""
+    st.session_state.resolved_smiles_val = ""
 
-smiles_input = st.sidebar.text_input("Введіть SMILES з'єднання:", key="smiles_val")
-inchi_input = st.sidebar.text_input("Або введіть InChIKey (наприклад з NIST):", key="inchi_val")
+# 1-й рядок: Введення SMILES
+smiles_input = st.sidebar.text_input("1. Введіть SMILES з'єднання:", key="smiles_val")
+
+# 2-й рядок: Введення InChIKey
+inchi_input = st.sidebar.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchi_val")
+
+# 3-й рядок: Визначений / Результуючий SMILES
+resolved_smiles_input = st.sidebar.text_input("3. Визначений SMILES (результат конвертації):", key="resolved_smiles_val")
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 search_btn = col_btn1.button("Перевірити")
@@ -45,14 +55,17 @@ PATTERNS = {
 }
 
 def get_smiles_from_inchikey(inchi_key):
+    clean_key = inchi_key.strip()
+    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{clean_key}/property/CanonicalSMILES/json"
     try:
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchi_key.strip()}/property/CanonicalSMILES/json"
-        response = requests.get(url, timeout=3)
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            return data['PropertyTable']['Properties'][0].get('CanonicalSMILES')
-    except Exception:
-        pass
+            props = data.get('PropertyTable', {}).get('Properties', [])
+            if props:
+                return props[0].get('CanonicalSMILES')
+    except Exception as e:
+        st.error(f"Помилка запиту до PubChem: {e}")
     return None
 
 def get_pubchem_info(smiles):
@@ -72,7 +85,7 @@ def get_pubchem_info(smiles):
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
-        return None, "Помилка: невірний формат SMILES або не вдалося отримати структуру за InChIKey."
+        return None, f"Помилка: не вдалося побудувати молекулу RDKit з рядка SMILES: `{smiles}`"
 
     mw = Descriptors.MolWt(mol)
     heavy_atoms_count = mol.GetNumHeavyAtoms()
@@ -112,14 +125,20 @@ def analyze_molecule(smiles):
 if search_btn:
     target_smiles = smiles_input.strip()
     
+    # Якщо введено 3-є поле (визначений SMILES), пріоритет йому
+    if not target_smiles and resolved_smiles_input.strip():
+        target_smiles = resolved_smiles_input.strip()
+
+    # Якщо перші два пусті, а введено InChIKey — конвертуємо і записуємо в 3-є поле
     if not target_smiles and inchi_input.strip():
         with st.spinner("Пошук структури за InChIKey через PubChem..."):
             resolved_smiles = get_smiles_from_inchikey(inchi_input.strip())
             if resolved_smiles:
                 target_smiles = resolved_smiles
+                st.session_state.resolved_smiles_val = target_smiles
                 st.success(f"Успіх: знайдено SMILES -> {target_smiles}")
             else:
-                st.error("Не вдалося знайти сполуку в базі за введеним InChIKey.")
+                st.error("Не вдалося знайти сполуку в базі PubChem за введеним InChIKey.")
 
     if target_smiles:
         res, err = analyze_molecule(target_smiles)
