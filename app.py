@@ -36,7 +36,7 @@ def get_smiles_from_inchikey(inchi_key):
         pass
     return None
 
-# Логіка аналізу для всіх груп
+# Логіка аналізу для всіх груп (з урахуванням пріоритету катинонів)
 def analyze_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -61,7 +61,16 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in fentanyl_smarts):
         groups_found.append("Похідні групи фентанілу (4-анілінопіперидин та гетероциклічні аналоги)")
         
-    # 2. Група триптамінів / індольних сполук
+    # 2. Група катинонів (бета-кето-фенетиламіни, альфа-PVP) — вищий пріоритет
+    cathinone_smarts = [
+        Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
+        Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
+        Chem.MolFromSmarts("C(=O)C(N)")
+    ]
+    if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
+        groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
+
+    # 3. Група триптамінів / індольних сполук
     triptamine_smarts = [
         Chem.MolFromSmarts("c1cc2c(cc1)c(CCN)cn2"),
         Chem.MolFromSmarts("c1ccc2c(c1)cc[nH]2"),
@@ -70,7 +79,7 @@ def analyze_molecule(smiles):
     if any(s and mol.HasSubstructMatch(s) for s in triptamine_smarts):
         groups_found.append("Похідні триптамінів / індольні сполуки")
 
-    # 3. Група фенетиламінів / амфетамінів / бензиламінів
+    # 4. Група фенетиламінів / амфетамінів / бензиламінів
     phenethyl_smarts = [
         Chem.MolFromSmarts("c1ccccc1CC(C)N"),
         Chem.MolFromSmarts("c1ccccc1CCN"),
@@ -78,15 +87,6 @@ def analyze_molecule(smiles):
     ]
     if any(s and mol.HasSubstructMatch(s) for s in phenethyl_smarts):
         groups_found.append("Похідні фенетиламінів / амфетамінів / заміщених бензиламінів")
-
-    # 4. Група катинонів (бета-кето-фенетиламіни, альфа-PVP)
-    cathinone_smarts = [
-        Chem.MolFromSmarts("c1ccccc1C(=O)CNC"),
-        Chem.MolFromSmarts("c1ccccc1C(=O)C(N1CCCC1)"),
-        Chem.MolFromSmarts("C(=O)C(N)")
-    ]
-    if any(s and mol.HasSubstructMatch(s) for s in cathinone_smarts):
-        groups_found.append("Похідні катинонів ($\beta$-кето-фенетиламіни)")
 
     # 5. Група фенциклідину (PCP / циклогексиламіни)
     pcp_smarts = [
@@ -141,7 +141,6 @@ st.caption("Експертна служба МВС України (згідно 
 with st.sidebar:
     st.header("Введення структури")
     
-    # Використовуємо ключі через session_state для коректного очищення
     smiles_input = st.text_area("1. Введіть SMILES з'єднання:", key="smiles_val", placeholder="Наприклад: CCC(=O)N(...)")
     inchikey_input = st.text_input("2. Або введіть InChIKey (наприклад з NIST):", key="inchikey_val", placeholder="FDEYROXLYFBBPU-...")
     
@@ -251,7 +250,7 @@ if target_smiles:
                     * **Містковий залишок / Периферичні замісники ($R_n$):** Зафіксовано наявність алкільних, ацильних, алкокси- або інших функціональних замісників у вузлах базової структури.
 
                     #### 5. Атомні центри та гетероатоми (Амірна складова)
-                    * **Природа азотних центрів:** У структурі можуть бути присутні як ендоциклічні атоми азоту (у складі гетероциклів), так і екзоциклічні аліфатичні аміннігрупи (первинні, вторинні або третинні аміни).
+                    * **Природа азотних центрів:** У структурі можуть бути присутні як ендоциклічні атоми азоту (у складі гетероциклів), так і екзоциклічні аліфатичні амінні групи (первинні, вторинні або третинні аміни).
                     * **Донори / Акцептори водневих зв'язків:** Донори — {res['h_donors']}, Акцептори — {res['h_acceptors']}.
 
                     #### 6. Підсумковий структурний паспорт
@@ -259,7 +258,7 @@ if target_smiles:
                     * **Циклічна система:** Згідно з конфігурацією молекули
                     * **Гетероциклічні атоми:** Враховано в контурі ядра
                     * **Боковий ланцюг / замісники:** Наявні згідно з лімітами довжини
-                    * **Стереоцентрти:** Проаналізовано
+                    * **Стереоцентри:** Проаналізовано
                     * **Головна структурна особливість:** Досліджувана молекула повністю відповідає загальним критеріям віднесення до похідних підконтрольних речовин згідно з Постановою Кабінету Міністрів України № 1213.
                     """)
     else:
